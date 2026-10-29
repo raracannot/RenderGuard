@@ -1,0 +1,274 @@
+/* ================================================================
+   皮肤的结构语言
+   令牌只能换颜色；这些规则决定"控件长什么样"：
+   进度条形态 / 面板边框 / 控制台质感 / 条形码 / 扫描线
+   ================================================================ */
+
+/* ---------------------------------------------------------- 01 铣削面板
+   进度是内凹槽 + 琥珀填充 + 刻度线（不是仪表，但保持机械感） */
+:root[data-theme="01"] .bar {
+  height: 9px; background: #0b0d0f; border: 1px solid #000; border-radius: 2px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.95), 0 1px 0 rgba(255,255,255,.07);
+}
+:root[data-theme="01"] .bar i {
+  background: linear-gradient(180deg, #ffc86a, #e08a12);
+  box-shadow: 0 0 10px rgba(255,166,43,.5);
+}
+:root[data-theme="01"] .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.8) 9px 10px);
+}
+:root[data-theme="01"] .prog span { letter-spacing: .6px; }
+:root[data-theme="01"] .panel-head {
+  background: linear-gradient(180deg, #2b3035, #1d2125);
+  border-bottom: 1px solid #0a0b0c;
+}
+:root[data-theme="01"] .panel-title {
+  text-transform: uppercase; letter-spacing: 1.8px; text-shadow: 0 1px 0 #000;
+}
+
+/* ---------------------------------------------------------- 05 取景监视器
+   电池格进度 + 面板四角取景括号 */
+:root[data-theme="05"] .panel { position: relative; }
+:root[data-theme="05"] .panel::before,
+:root[data-theme="05"] .panel::after {
+  content: ""; position: absolute; width: 11px; height: 11px;
+  border: 1px solid #3a4046; pointer-events: none; z-index: 2;
+}
+:root[data-theme="05"] .panel::before { left: 6px; top: 6px; border-right: 0; border-bottom: 0; }
+:root[data-theme="05"] .panel::after { right: 6px; bottom: 6px; border-left: 0; border-top: 0; }
+:root[data-theme="05"] .bar { height: 9px; background: #0b0c0d; border: 1px solid #2c3136; border-radius: 0; }
+:root[data-theme="05"] .bar i { border-radius: 0; background: #ff3b30; box-shadow: 0 0 8px rgba(255,59,48,.5); }
+:root[data-theme="05"] .panel-title { text-transform: uppercase; letter-spacing: 2.2px; }
+
+/* ---------------------------------------------------------- 08 示波器
+   波形进度（1px 亮线 + 辉光）+ 荧光字 */
+:root[data-theme="08"] .bar {
+  height: 13px; background: #020403; border: 1px solid #123a28; border-radius: 0;
+}
+:root[data-theme="08"] .bar i {
+  top: 50%; bottom: auto; height: 1px; transform: translateY(-50%);
+  background: #4dff9e; box-shadow: 0 0 10px #4dff9e, 0 0 20px rgba(77,255,158,.6);
+}
+:root[data-theme="08"] .panel-title,
+:root[data-theme="08"] .cell.mono { text-shadow: 0 0 7px currentColor; }
+:root[data-theme="08"] .panel-head { border-bottom: 1px solid #123a28; }
+
+/* ---------------------------------------------------------- 09 数控面板
+   外壳是浅灰工程塑料，数据区是嵌入式暗槽；进度是段码灯条 */
+:root[data-theme="09"] .panel { padding: 6px; }
+:root[data-theme="09"] .panel-head {
+  margin: -6px -6px 6px; border-radius: 6px 6px 0 0;
+  background: #3a4043; border-bottom: 1px solid #202426;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
+}
+:root[data-theme="09"] .panel-title { text-transform: uppercase; letter-spacing: 1.7px; }
+:root[data-theme="09"] .thead { text-transform: uppercase; letter-spacing: 1.5px; }
+:root[data-theme="09"] .table,
+:root[data-theme="09"] .detail,
+:root[data-theme="09"] .console-panel { border-radius: 4px; }
+:root[data-theme="09"] .bar {
+  height: 11px; background: #101412; border: 1px solid #000; border-radius: 2px;
+}
+:root[data-theme="09"] .bar i { background: #8dff8a; box-shadow: 0 0 9px rgba(141,255,138,.65); }
+:root[data-theme="09"] .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 7px, #101412 7px 9px);
+}
+
+/* ---------------------------------------------------------- 10 军用电台
+   厚边框 + 琥珀刻度条 */
+:root[data-theme="10"] .panel { border: 2px solid #12150e; }
+:root[data-theme="10"] .panel-title { text-transform: uppercase; letter-spacing: 1.8px; }
+:root[data-theme="10"] .bar {
+  height: 10px; background: #1b1f16; border: 1px solid #0e110a;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.85);
+}
+:root[data-theme="10"] .bar i { background: linear-gradient(90deg, #c85a10, #ffb877); }
+:root[data-theme="10"] .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 8px, #10130c 8px 9px);
+}
+
+/* ---------------------------------------------------------- 24 电子小票
+   点线进度 + 控制台底部条形码 + 两侧走纸孔 */
+:root[data-theme="24"] .bar {
+  height: 7px; background: #e8e3d6; border: 0; border-radius: 0; box-shadow: none;
+}
+:root[data-theme="24"] .bar i { background: #c0392b; border-radius: 0; }
+:root[data-theme="24"] .console-panel { position: relative; padding-bottom: 28px; }
+:root[data-theme="24"] .console-panel::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 7px; height: 15px;
+  opacity: .8;
+  background: repeating-linear-gradient(90deg,
+    #232019 0 2px, transparent 2px 4px,
+    #232019 4px 6px, transparent 6px 8px,
+    #232019 8px 11px, transparent 11px 14px);
+}
+:root[data-theme="24"] .console {
+  background-image:
+    radial-gradient(circle, #d9d4c9 2px, transparent 2.4px),
+    radial-gradient(circle, #d9d4c9 2px, transparent 2.4px);
+  background-size: 12px 12px, 12px 12px;
+  background-position: right 2px top 0, left 2px top 0;
+  background-repeat: repeat-y, repeat-y;
+  padding-left: 16px; padding-right: 16px;
+}
+
+/* ---------------------------------------------------------- 27 Blender
+   Blender 蓝细条 + 选中行蓝底 */
+:root[data-theme="27"] .bar { height: 6px; background: #1a1a1a; border: 1px solid #101010; }
+:root[data-theme="27"] .bar i { background: #5b8ad4; }
+:root[data-theme="27"] .row.sel { background: rgba(71,114,179,.18); }
+:root[data-theme="27"] .row.sel::before { background: #4772b3; }
+:root[data-theme="27"] .panel-title { letter-spacing: .3px; }
+
+/* ---------------------------------------------------------- 32 手绘马克笔
+   马克笔粗条（圆头）+ 抖动边框 */
+:root[data-theme="32"] .panel { border: 2px dashed #c9bd8e; }
+:root[data-theme="32"] .panel:nth-of-type(1) { border-radius: 16px 9px 18px 8px; }
+:root[data-theme="32"] .panel:nth-of-type(2) { border-radius: 9px 17px 8px 16px; }
+:root[data-theme="32"] .bar {
+  height: 12px; background: #fffdf5; border: 2px solid #2b2413; border-radius: 8px;
+}
+:root[data-theme="32"] .bar i { background: #ff5c8a; border-radius: 6px; }
+:root[data-theme="32"] button { border: 2px dashed #c9bd8e; }
+:root[data-theme="32"] .panel-title { letter-spacing: .4px; }
+
+/* ---------------------------------------------------------- 33 赛博霓虹
+   切角面板 + 霓虹进度 */
+:root[data-theme="33"] .panel {
+  clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+}
+:root[data-theme="33"] .panel-title { text-transform: uppercase; letter-spacing: 3px; }
+:root[data-theme="33"] .bar { height: 8px; background: #04060b; border: 1px solid #202844; }
+:root[data-theme="33"] .bar i { background: linear-gradient(90deg, #00f0ff, #ff2bd6); box-shadow: 0 0 12px rgba(0,240,255,.7); }
+:root[data-theme="33"] button { text-transform: uppercase; letter-spacing: 1.2px; }
+
+/* ---------------------------------------------------------- 34 赛博酸绿
+   同构但换成酸绿，切角更小 */
+:root[data-theme="34"] .panel {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+:root[data-theme="34"] .panel-title { text-transform: uppercase; letter-spacing: 2.6px; }
+:root[data-theme="34"] .bar { height: 8px; background: #050905; border: 1px solid #223a18; }
+:root[data-theme="34"] .bar i { background: linear-gradient(90deg, #7dff00, #00ffc8); box-shadow: 0 0 12px rgba(125,255,0,.6); }
+:root[data-theme="34"] button { text-transform: uppercase; letter-spacing: 1px; }
+
+/* ---------------------------------------------------------- 45 GBA DMG
+   补足"信息量"：行号、双层表头、像素网格、底部帧条 */
+:root[data-theme="45"] .table { counter-reset: job; }
+:root[data-theme="45"] .row { counter-increment: job; border-bottom: 2px solid #0f380f; }
+:root[data-theme="45"] .row .name::before {
+  content: counter(job, decimal-leading-zero) "  "; color: #306230;
+}
+:root[data-theme="45"] .tbody {
+  background-image: repeating-linear-gradient(0deg, rgba(15,56,15,.07) 0 1px, transparent 1px 3px);
+}
+:root[data-theme="45"] .thead { background: #8bac0f; border-bottom: 2px solid #0f380f; }
+:root[data-theme="45"] .panel-head { background: #9bbc0f; border-bottom: 2px solid #0f380f; }
+:root[data-theme="45"] .count { background: #9bbc0f; border: 2px solid #0f380f; border-radius: 0; padding: 0 6px; }
+:root[data-theme="45"] .chip { background: transparent; border: 2px solid #0f380f; border-radius: 0; }
+:root[data-theme="45"] .chip::before { content: "■"; width: auto; height: auto; background: none; border-radius: 0; font-size: 8px; }
+:root[data-theme="45"] .detail h3::before { content: "▸ "; }
+:root[data-theme="45"] .prog span { letter-spacing: .8px; }
+/* 队列底部：帧刻度条 */
+:root[data-theme="45"] .table::after {
+  content: ""; height: 14px; flex: none; margin-top: auto; border-top: 2px solid #0f380f;
+  background: repeating-linear-gradient(90deg, #0f380f 0 5px, transparent 5px 8px);
+  opacity: .5;
+}
+/* 详情：字段行加像素点线 */
+:root[data-theme="45"] .kv dd { border-bottom: 1px dotted #306230; padding-bottom: 2px; }
+:root[data-theme="45"] .panel { border: 2px solid #0f380f; box-shadow: 3px 3px 0 #0f380f; }
+:root[data-theme="45"] .panel-title { text-transform: uppercase; }
+:root[data-theme="45"] .bar {
+  height: 10px; background: #8bac0f; border: 2px solid #0f380f; border-radius: 0;
+}
+:root[data-theme="45"] .bar i { background: #0f380f; border-radius: 0; box-shadow: none; }
+:root[data-theme="45"] .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, #8bac0f 6px 8px);
+}
+:root[data-theme="45"] .chip { border: 2px solid #0f380f; border-radius: 0; background: #8bac0f; }
+
+/* ---------------------------------------------------------- 46 GBA 外壳
+   玻璃管进度（内凹 + 发光）+ 塑料按键 */
+:root[data-theme="46"] .bar {
+  height: 12px; background: #0f1a0c; border: 1px solid #14171c; border-radius: 6px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.85);
+}
+:root[data-theme="46"] .bar i {
+  background: linear-gradient(180deg, #c8e83a, #7a9a10); border-radius: 5px;
+  box-shadow: 0 0 10px rgba(155,188,15,.7);
+}
+:root[data-theme="46"] button { border-bottom-width: 3px; }
+:root[data-theme="46"] .panel-head { border-bottom: 2px solid #14171c; background: rgba(0,0,0,.12); }
+
+/* ---------------------------------------------------------- 50 发票复联
+   斜线填充进度 + 红头双线 + 条形码 */
+:root[data-theme="50"] .panel { border-top: 3px double #b03a48; }
+:root[data-theme="50"] .bar { height: 8px; background: #eef3f8; border: 1px solid #b8c4d0; }
+:root[data-theme="50"] .bar i {
+  background: repeating-linear-gradient(45deg, #b03a48 0 3px, #d06070 3px 6px);
+}
+:root[data-theme="50"] .thead { border-bottom: 2px solid #b03a48; }
+:root[data-theme="50"] .console-panel { position: relative; padding-bottom: 26px; }
+:root[data-theme="50"] .console-panel::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 6px; height: 14px;
+  opacity: .6;
+  background: repeating-linear-gradient(90deg,
+    #1e2a38 0 2px, transparent 2px 4px, #1e2a38 4px 5px, transparent 5px 9px, #1e2a38 9px 12px, transparent 12px 14px);
+}
+
+/* ---------------------------------------------------------- 58 赛博终端
+   字符块进度 + 提示符 + 等宽小字 */
+:root[data-theme="58"] .bar { height: 10px; background: #030504; border: 1px solid #1a4a30; border-radius: 0; }
+:root[data-theme="58"] .bar i { background: #4dff9e; box-shadow: 0 0 9px rgba(77,255,158,.6); border-radius: 0; }
+:root[data-theme="58"] .bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 5px, #030504 5px 7px);
+}
+:root[data-theme="58"] .panel-title { text-transform: uppercase; letter-spacing: 2.6px; }
+:root[data-theme="58"] .console .ln:last-child::before { content: "$ "; color: #2e8a5c; }
+
+/* 45 的运行状态条：LIVE 大数字 + NOW / NEXT + 统计 */
+:root[data-theme="45"] .live-strip {
+  display: flex; align-items: stretch; flex: none;
+  border-top: 2px solid #0f380f; background: #8bac0f;
+}
+:root[data-theme="45"] .ls-live {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 7px 16px; border-right: 2px solid #0f380f; min-width: 104px;
+}
+:root[data-theme="45"] .ls-live b { font-size: 26px; line-height: 1; letter-spacing: 1px; }
+:root[data-theme="45"] .ls-live span { font-size: 10px; color: #306230; margin-top: 3px; }
+:root[data-theme="45"] .ls-mid {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  gap: 4px; padding: 6px 12px; min-width: 0;
+}
+:root[data-theme="45"] .ls-now,
+:root[data-theme="45"] .ls-next {
+  font-size: 11px; color: #0f380f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+:root[data-theme="45"] .ls-now i,
+:root[data-theme="45"] .ls-next i {
+  font-style: normal; display: inline-block; margin-right: 8px; padding: 0 5px;
+  background: #0f380f; color: #9bbc0f; font-size: 9px; letter-spacing: 1px;
+}
+:root[data-theme="45"] .ls-stat {
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  padding: 6px 14px; border-left: 2px solid #0f380f; font-size: 10px; color: #0f380f;
+}
+
+/* ---------------------------------------------------------- 69 CRT
+   磷光轨迹进度 + 文字余辉 */
+:root[data-theme="69"] .bar {
+  height: 9px; background: #020b07; border: 1px solid #0d2b1e; border-radius: 3px;
+}
+:root[data-theme="69"] .bar i {
+  background: #6dffb0; border-radius: 2px;
+  box-shadow: 0 0 10px #6dffb0, 0 0 22px rgba(109,255,176,.5);
+}
+:root[data-theme="69"] .console .ln { text-shadow: 0 0 6px rgba(109,255,176,.45); }
+:root[data-theme="69"] .panel-title { text-transform: uppercase; letter-spacing: 2.4px; }

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="09">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渲染守护 RenderGuard</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="skins.css" />
+<link rel="stylesheet" href="skins_extra.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ 顶栏 ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <span class="brand-name">渲染守护</span>
+      <span class="brand-sub">RenderGuard</span>
+    </div>
+    <div class="top-right">
+      <span class="hint" id="dataDirHint"></span>
+      <button class="ghost" id="btnDataDir">数据目录</button>
+      <button class="ghost" id="btnSettings">设置</button>
+    </div>
+  </header>
+
+  <!-- ============ 主体 ============ -->
+  <main class="main">
+
+    <!-- 队列 -->
+    <section class="panel queue-panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          渲染队列
+          <span class="count" id="queueCount">0</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn primary" id="btnAdd">＋ 添加任务</button>
+          <button class="btn" id="btnAddFolder">文件夹</button>
+          <button class="btn" id="btnImport">导入</button>
+          <button class="btn" id="btnExport">导出</button>
+          <span class="sep"></span>
+          <button class="btn" id="btnStart">▶ 开始</button>
+          <button class="btn" id="btnStop">■ 停止</button>
+          <button class="btn" id="btnRetry">↻ 重试失败帧</button>
+          <button class="btn danger" id="btnRemove">删除</button>
+        </div>
+      </div>
+
+      <div class="table">
+        <div class="thead">
+          <div class="col-name">任务</div>
+          <div class="col-scene">场景</div>
+          <div class="col-range">帧范围</div>
+          <div class="col-engine">引擎</div>
+          <div class="col-status">状态</div>
+          <div class="col-progress">进度</div>
+          <div class="col-cur">当前帧</div>
+          <div class="col-retry">重试</div>
+        </div>
+        <div class="tbody" id="queueBody"></div>
+        <div class="empty" id="queueEmpty">
+          <div class="empty-icon">◔</div>
+          <p>队列是空的</p>
+          <p class="dim">点「添加任务」，或把 .blend / 文件夹拖进来批量建任务</p>
+        </div>
+        <!-- 只在少数皮肤里显示的运行状态条（默认 display:none） -->
+        <div class="live-strip" id="liveStrip"></div>
+      </div>
+    </section>
+
+    <!-- 详情 -->
+    <aside class="panel detail-panel">
+      <div class="panel-head">
+        <div class="panel-title">任务详情</div>
+      </div>
+      <div class="detail" id="detail">
+        <div class="empty dim">选择左侧任务查看详情</div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============ 控制台 ============ -->
+  <section class="console-panel">
+    <div class="console-head">
+      <div class="panel-title">
+        控制台
+        <span class="live" id="liveDot"></span>
+      </div>
+      <div class="toolbar">
+        <button class="ghost small" id="btnNoise" title="显示 Blender 插件的启动/退出噪声">噪声</button>
+        <button class="ghost small" id="btnConsoleClear">清空</button>
+        <button class="ghost small" id="btnConsoleLog">打开日志</button>
+      </div>
+    </div>
+    <div class="console" id="console"></div>
+  </section>
+
+</div>
+
+<!-- ============ 任务编辑弹窗 ============ -->
+<div class="overlay hidden" id="dlgOverlay">
+  <div class="dialog">
+    <div class="dialog-head">
+      <span id="dlgTitle">新建渲染任务</span>
+      <button class="ghost small" id="dlgClose">✕</button>
+    </div>
+
+    <div class="dialog-body">
+
+      <!-- 源文件 -->
+      <div class="fsrc">
+        <label class="fl">
+          <span>Blender</span>
+          <div class="row-inline">
+            <select id="selBlender"></select>
+            <button class="btn small" id="btnBrowseBlender">浏览</button>
+            <button class="btn small" id="btnRememberBlender" title="以后新建任务默认用它">设为默认</button>
+            <button class="btn small" id="btnTestBlender" title="启动一次，确认它真的能跑">有效性测试</button>
+            <span class="status-text" id="blenderStatus"></span>
+          </div>
+        </label>
+        <label class="fl">
+          <span>工程文件</span>
+          <div class="row-inline">
+            <input type="text" id="inpBlend" placeholder="选择 .blend 文件" />
+            <button class="btn small" id="btnBrowseBlend">浏览</button>
+          </div>
+        </label>
+        <div class="open-blenders" id="openBlendersRow">
+          <span class="ob-label">已打开：</span>
+          <div class="ob-chips" id="openBlenders"></div>
+          <button class="ghost small" id="btnRefreshOpen" title="重新检测">⟳</button>
+        </div>
+        <div class="row-inline end">
+          <button class="btn primary" id="btnProbe">读取参数</button>
+          <span class="status-text" id="probeStatus"></span>
+        </div>
+      </div>
+
+      <!-- 场景 -->
+      <div class="section">
+        <div class="section-title">场景</div>
+        <div class="scenes" id="sceneList">
+          <div class="dim small">先选择 Blender 与工程文件，然后点「读取参数」</div>
+        </div>
+      </div>
+
+      <!-- 参数覆盖 -->
+      <div class="section">
+        <div class="section-title">
+          参数覆盖
+          <span class="dim small">勾选的项会覆盖 .blend 里的值</span>
+        </div>
+
+        <div class="ov-grid">
+          <label class="ov">
+            <input type="checkbox" id="chkCamera" />
+            <span class="ov-name">活动相机</span>
+            <select id="inpCamera" disabled></select>
+          </label>
+
+          <label class="ov">
+            <input type="checkbox" id="chkRes" />
+            <span class="ov-name">分辨率</span>
+            <span class="row-inline">
+              <input type="number" id="inpResW" class="num" disabled />
+              <span class="x">×</span>
+              <input type="number" id="inpResH" class="num" disabled />
+              <input type="number" id="inpResPct" class="num" disabled />
+              <span class="unit">%</span>
+            </span>
+          </label>
+
+          <label class="ov">
+            <input type="checkbox" id="chkFps" />
+            <span class="ov-name">帧率</span>
+            <input type="number" id="inpFps" class="num" step="0.001" disabled />
+          </label>
+
+          <label class="ov">
+            <input type="checkbox" id="chkRange" />
+            <span class="ov-name">帧范围</span>
+            <span class="row-inline">
+              <input type="number" id="inpStart" class="num" disabled />
+              <span class="x">–</span>
+              <input type="number" id="inpEnd" class="num" disabled />
+              <span class="unit">步</span>
+              <input type="number" id="inpStep" class="num sm" disabled />
+            </span>
+          </label>
+
+          <label class="ov">
+            <input type="checkbox" id="chkType" />
+            <span class="ov-name">渲染类型</span>
+            <span class="row-inline">
+              <select id="inpType" disabled>
+                <option value="anim">动画序列</option>
+                <option value="still">单帧静帧</option>
+              </select>
+              <input type="number" id="inpStill" class="num" disabled title="静帧帧号" />
+            </span>
+          </label>
+
+          <label class="ov">
+            <input type="checkbox" id="chkFormat" />
+            <span class="ov-name">输出格式</span>
+            <select id="inpFormat" disabled></select>
+          </label>
+
+          <label class="ov wide">
+            <input type="checkbox" id="chkOut" />
+            <span class="ov-name">输出路径</span>
+            <span class="row-inline grow">
+              <input type="text" id="inpOutDir" placeholder="输出目录" disabled />
+              <button class="btn small" id="btnBrowseOut" disabled>浏览</button>
+              <span class="unit">前缀</span>
+              <input type="text" id="inpPrefix" class="prefix" disabled />
+            </span>
+          </label>
+        </div>
+
+        <div class="out-preview">
+          <span class="dim">实际输出：</span>
+          <code id="outPreview">—</code>
+        </div>
+        <div class="warn-text hidden" id="movieWarn">
+          视频格式（mp4 等）无法做帧级续接，崩溃后只能整段重来。建议输出图片序列再合成。
+        </div>
+      </div>
+
+      <!-- 重试策略 -->
+      <div class="section">
+        <div class="section-title">崩溃处理</div>
+        <div class="policy">
+          <label class="chk">
+            <input type="checkbox" id="chkResume" checked />
+            <span>续渲染<em>跳过已存在的帧</em></span>
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="chkAutoRestart" checked />
+            <span>崩溃后自动重启<em>从断点接着渲</em></span>
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="chkVerify" checked />
+            <span>校验输出文件<em>按魔数检查完整性</em></span>
+          </label>
+          <label class="field-inline">
+            <span>同帧最多重试</span>
+            <input type="number" id="inpRetries" class="num" value="3" min="0" max="99" />
+            <span>次</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-foot">
+      <button class="btn" id="dlgCancel">取消</button>
+      <button class="btn primary" id="dlgSave">加入队列</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 设置弹窗 ============ -->
+<div class="overlay hidden" id="setOverlay">
+  <div class="dialog small settings-dialog">
+    <div class="dialog-head">
+      <span>设置</span>
+      <button class="ghost small" id="setClose">✕</button>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-tab="blender">Blender</button>
+      <button class="tab" data-tab="run">运行</button>
+      <button class="tab" data-tab="skin">皮肤</button>
+      <button class="tab" data-tab="about">版权</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="tabpane" data-pane="blender">
+        <div class="field">
+          <label for="setBlender">默认路径</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="setBlender" placeholder="选择 blender.exe，例如 …\Blender 5.1\blender.exe" />
+              <button class="btn small" id="setBlenderBrowse">浏览</button>
+              <button class="btn small" id="setBlenderTest">有效性测试</button>
+            </div>
+            <div class="field-hint">新任务默认使用这个路径；单个任务里仍然可以另选别的版本</div>
+            <div class="field-hint" id="setBlenderStatus"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane hidden" data-pane="run">
+        <div class="field">
+          <label for="setIdle">卡死判定</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="number" id="setIdle" class="num" min="0" />
+              <span class="unit">秒</span>
+            </div>
+            <div class="field-hint">0 表示关闭。只有「长时间无输出」且「CPU 时间不增长」同时成立，才判定为卡死</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="setRetries">默认重试</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="number" id="setRetries" class="num" min="0" max="99" />
+              <span class="unit">次</span>
+            </div>
+            <div class="field-hint">同一帧连续失败超过这个次数就隔离该帧，继续后面的帧</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>队列</label>
+          <div class="field-ctl">
+            <label class="chk">
+              <input type="checkbox" id="setQueueAuto" />
+              <span>一个任务完成后自动开始下一个</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>纯净模式</label>
+          <div class="field-ctl">
+            <label class="chk">
+              <input type="checkbox" id="setClean" />
+              <span>渲染时不加载任何插件</span>
+            </label>
+            <div class="field-hint">
+              更稳定、启动更快，也看不到插件刷屏。Octane / V-Ray 等第三方引擎依赖插件，
+              遇到这类任务会自动跳过纯净模式；Cycles 的 GPU 设备偏好会自动沿用。
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>完成后</label>
+          <div class="field-ctl">
+            <label class="chk">
+              <input type="checkbox" id="setShutdown" />
+              <span>整个队列结束后自动关机</span>
+            </label>
+            <div class="field-hint">
+              结束时弹出 3 分钟倒计时提示，可取消或立即关机；不操作则自动关机
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane hidden" data-pane="skin">
+        <div class="field" style="grid-template-columns: 1fr">
+          <div class="field-ctl">
+            <div class="skin-grid" id="skinGrid"></div>
+            <div class="field-hint">点一下即时预览，保存后下次启动沿用。深色 / 浅色都做了对比度处理。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane hidden" data-pane="about">
+        <div class="about-head">
+          <div>
+            <div class="about-title">渲染守护 <span>RenderGuard</span></div>
+            <div class="about-sub">Blender 批量渲染队列 · 崩溃自动续接</div>
+          </div>
+          <div class="about-ver">v1.0.0</div>
+        </div>
+
+        <div class="field">
+          <label>作者</label>
+          <div class="field-ctl"><div class="about-line">RARA</div></div>
+        </div>
+
+        <div class="field">
+          <label>主页</label>
+          <div class="field-ctl">
+            <a class="about-link" id="aboutLink" href="#" title="space.bilibili.com/27284213">来一点咖啡吗</a>
+            <div class="field-hint">Bilibili 个人空间</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>开源声明</label>
+          <div class="field-ctl">
+            <div class="about-line">MIT License</div>
+            <div class="field-hint">
+              本工具以 MIT 协议开源，可自由使用、修改与分发，请保留原始版权声明。
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>第三方</label>
+          <div class="field-ctl">
+            <div class="field-hint" style="line-height: 1.75">
+              Tauri 2（MIT / Apache-2.0）· Rust 生态依赖（各自许可证）<br />
+              Microsoft Edge WebView2（微软）· 渲染与场景解析由本机 Blender 完成
+            </div>
+          </div>
+        </div>
+
+        <div class="about-foot">
+          本工具不修改你的 .blend 文件：全部参数通过启动脚本注入，输出只写在你指定的目录
+        </div>
+      </div>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn" id="setCancel">取消</button>
+      <button class="btn primary" id="setSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 关机倒计时 ============ -->
+<div class="overlay hidden" id="offOverlay">
+  <div class="dialog small" style="width: 430px">
+    <div class="dialog-head">
+      <span>渲染完成</span>
+      <button class="ghost small" id="offClose">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div class="off-big">全部队列已结束</div>
+      <div class="off-sub">将在 <b id="offSec">180</b> 秒后自动关机</div>
+      <div class="field-hint" style="margin-top: 10px">关闭本提示即取消关机</div>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn" id="offCancel">取消关机</button>
+      <button class="btn danger" id="offNow">立即关机</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

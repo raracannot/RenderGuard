@@ -1,0 +1,369 @@
+@font-face {
+  font-family: "RG Pixel";
+  src: url("fonts/Silkscreen-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+/* ================================================================
+   皮肤定义
+   只覆盖令牌；少数皮肤另外补几条结构规则（外壳 / 凹陷 / 字形）
+   ================================================================ */
+
+/* ---------------------------------------------------------- 01 铣削面板 */
+:root[data-theme="01"] {
+  --bg: #15171a; --bg2: #1a1d20; --panel: #1f2327; --panel2: #25292d; --panel3: #2b3035;
+  --border: #0b0c0d; --border-soft: #14171a; --border-hi: #3f464d;
+  --text: #dfe3e7; --dim: #8b939b; --dim2: #656d74;
+  --accent: #ffa62b; --accent-rgb: 255,166,43; --accent-dim: #6b4410;
+  --accent-a: #ffbd55; --accent-b: #e08a12; --accent-a-hi: #ffca75; --accent-b-hi: #ef9a26;
+  --accent-border: #8a5410; --accent-ink: #2a1a04;
+  --well: #0d0f11; --track: #0b0d0f; --bar-a: #e08a12; --bar-b: #ffc86a;
+  --chip-bg: #14171a; --chip-border: #2a3037; --chip-text: #9aa3ab;
+  --console-text: #9aa3ac; --ts: #4d545b; --tag: #6a727a;
+  --radius: 5px; --radius-s: 4px;
+  --font-ui: "Bahnschrift", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --shell: repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 1px, transparent 1px 3px), #101215;
+  --shell-color: #101215;
+  --overlay: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+  --overlay-op: .5;
+  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 2px 6px rgba(0,0,0,.4);
+}
+
+/* ---------------------------------------------------------- 05 取景监视器 */
+:root[data-theme="05"] {
+  --bg: #08090a; --bg2: #0c0d0e; --panel: #101112; --panel2: #15171a; --panel3: #1a1c1f;
+  --border: #262a2e; --border-soft: #1b1e21; --border-hi: #33383e;
+  --text: #eef1f3; --dim: #8f979e; --dim2: #5a6167;
+  --accent: #ff3b30; --accent-rgb: 255,59,48; --accent-dim: #8c1f18;
+  --accent-a: #ff5147; --accent-b: #e0322a; --accent-a-hi: #ff6a60; --accent-b-hi: #ef3d33;
+  --accent-border: #a3281f; --accent-ink: #fff;
+  --well: #0b0c0d; --track: #141618; --bar-a: #e8352b; --bar-b: #ff6b60;
+  --chip-bg: #131518; --chip-border: #24282c; --chip-text: #8f979e;
+  --console-text: #9ba3aa; --ts: #454b51; --tag: #666d74;
+  --radius: 2px; --radius-s: 2px;
+  --shell-color: #060707;
+  --overlay: linear-gradient(90deg, transparent 33.2%, rgba(255,255,255,.03) 33.2%, rgba(255,255,255,.03) calc(33.2% + 1px), transparent calc(33.2% + 1px)),
+             linear-gradient(90deg, transparent 66.5%, rgba(255,255,255,.03) 66.5%, rgba(255,255,255,.03) calc(66.5% + 1px), transparent calc(66.5% + 1px));
+  --overlay-op: 1;
+}
+
+/* ---------------------------------------------------------- 08 示波器 */
+:root[data-theme="08"] {
+  --bg: #040606; --bg2: #060a08; --panel: #080b0a; --panel2: #0b0f0d; --panel3: #0f1412;
+  --border: #17563a; --border-soft: #123a28; --border-hi: #2f9d63;
+  --text: #b9ffd3; --dim: #4fbf87; --dim2: #2f7a55;
+  --accent: #4dff9e; --accent-rgb: 77,255,158; --accent-dim: #17563a;
+  --accent-a: #6dffb0; --accent-b: #35d47e; --accent-a-hi: #8dffc4; --accent-b-hi: #45e08c;
+  --accent-border: #2f9d63; --accent-ink: #021208;
+  --ok: #4dff9e; --ok-rgb: 77,255,158; --ok-soft: #8dffc4; --ok-a: #2f9d63; --ok-b: #4dff9e;
+  --err: #ff6b5e; --err-rgb: 255,107,94; --err-soft: #ff9a90;
+  --warn: #ffc861; --warn-rgb: 255,200,97; --warn-soft: #ffd88a;
+  --blue: #6fe8ff; --blue-hi: #a8f4ff;
+  --well: #020403; --track: #020403; --bar-a: #2f9d63; --bar-b: #4dff9e;
+  --chip-bg: #071310; --chip-border: #17563a; --chip-text: #4fbf87;
+  --console-text: #59b98a; --ts: #1f5c3f; --tag: #2f7a55;
+  --scrim: rgba(0, 10, 5, .8);
+  --radius: 9px; --radius-s: 3px;
+  --font-ui: Consolas, "Cascadia Mono", "Microsoft YaHei UI", monospace;
+  --font-mono: Consolas, "Cascadia Mono", monospace;
+  --shell-color: #030505;
+  --overlay: repeating-linear-gradient(0deg, rgba(77,255,158,.045) 0 1px, transparent 1px 28px),
+             repeating-linear-gradient(90deg, rgba(77,255,158,.045) 0 1px, transparent 1px 28px);
+  --overlay-op: 1;
+}
+
+/* ---------------------------------------------------------- 09 数控面板（默认） */
+:root[data-theme="09"] {
+  --bg: #202426; --bg2: #3f4549; --panel: #454b4e; --panel2: #4d5356; --panel3: #565d60;
+  --border: #202426; --border-soft: #3a4043; --border-hi: #5c6467;
+  --text: #f0f3f5; --dim: #c3ccd1; --dim2: #9aa4a9;
+  --accent: #ff6a13; --accent-rgb: 255,106,19; --accent-dim: #8a3a08;
+  --accent-a: #ff8a3d; --accent-b: #e35a08; --accent-a-hi: #ff9d57; --accent-b-hi: #f0680f;
+  --accent-border: #8f3606; --accent-ink: #fff;
+  --ok: #6fe092; --ok-rgb: 111,224,146; --ok-soft: #8fe8a8; --ok-a: #3f9e5f; --ok-b: #6fe092;
+  --warn: #ffc46b; --warn-rgb: 255,196,107; --warn-soft: #ffd08a;
+  --err: #ff7a68; --err-rgb: 255,122,104; --err-soft: #ff9a8a;
+  --blue: #7ce8ff; --blue-hi: #a8f2ff;
+  --well: #22272a; --track: #101412; --bar-a: #4fbf4a; --bar-b: #8dff8a;
+  --chip-bg: #2a2f32; --chip-border: #3a4043; --chip-text: #b9c3c8;
+  --console-text: #a9b6bb; --ts: #6f7c82; --tag: #8b979c;
+  --radius: 6px; --radius-s: 5px;
+  --shell: radial-gradient(#2b3033 1px, transparent 1px) 0 0 / 5px 5px, #202426;
+  --shell-color: #202426;
+  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 -2px 0 rgba(0,0,0,.28), 0 3px 8px rgba(0,0,0,.35);
+}
+/* 09 的表格/详情/控制台是嵌入式暗槽 */
+:root[data-theme="09"] .table,
+:root[data-theme="09"] .detail,
+:root[data-theme="09"] .console-panel { background: var(--well); }
+:root[data-theme="09"] .thead,
+:root[data-theme="09"] .panel-head { background: rgba(0, 0, 0, .22); }
+:root[data-theme="09"] .console-panel { border-top: 1px solid var(--border); }
+
+/* ---------------------------------------------------------- 10 军用电台 */
+:root[data-theme="10"] {
+  --bg: #191d16; --bg2: #2a2f23; --panel: #353b2c; --panel2: #3e4534; --panel3: #474f3c;
+  --border: #12150e; --border-soft: #2a2f23; --border-hi: #545a46;
+  --text: #dde0cd; --dim: #a5a992; --dim2: #767a66;
+  --accent: #ff7a18; --accent-rgb: 255,122,24; --accent-dim: #a8460a;
+  --accent-a: #ff963f; --accent-b: #e2600a; --accent-a-hi: #ffa95c; --accent-b-hi: #ef6f18;
+  --accent-border: #12150e; --accent-ink: #fff;
+  --well: #171205; --track: #1b1f16; --bar-a: #c85a10; --bar-b: #ffb877;
+  --chip-bg: #2b3023; --chip-border: #12150e; --chip-text: #a5a992;
+  --console-text: #9fa68a; --ts: #5b6149; --tag: #7a8168;
+  --radius: 12px; --radius-s: 7px;
+  --shell: radial-gradient(#20251c 1px, transparent 1px) 0 0 / 6px 6px, #191d16;
+  --shell-color: #191d16;
+  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -3px 0 rgba(0,0,0,.28), 0 4px 12px rgba(0,0,0,.45);
+}
+/* 10 的详情是琥珀液晶屏 */
+:root[data-theme="10"] .detail {
+  background: radial-gradient(ellipse at 50% 0%, #241b08, #120e04 75%);
+  color: #e0b371;
+}
+:root[data-theme="10"] .detail h3 { color: #ffb347; }
+:root[data-theme="10"] .detail .kv dt { color: #8a6a2c; }
+:root[data-theme="10"] .detail .kv dd { color: #e0b371; }
+
+/* ---------------------------------------------------------- 24 电子小票 */
+:root[data-theme="24"] {
+  --bg: #d9d4c9; --bg2: #fbfaf5; --panel: #fbfaf5; --panel2: #f1eee4; --panel3: #e7e3d6;
+  --border: #c9c3b4; --border-soft: #e0dbcd; --border-hi: #b8b1a0;
+  --text: #232019; --dim: #6f6656; --dim2: #8a8071;
+  --accent: #c0392b; --accent-rgb: 192,57,43; --accent-dim: #d9b6ae;
+  --accent-a: #d8583f; --accent-b: #b8342a; --accent-a-hi: #e86a50; --accent-b-hi: #c93f33;
+  --accent-border: #8e2a20; --accent-ink: #fff8f4;
+  --ok: #3f6b3a; --ok-rgb: 63,107,58; --ok-soft: #4f8047; --ok-a: #3f6b3a; --ok-b: #5c8f52;
+  --warn: #a8721c; --warn-rgb: 168,114,28; --warn-soft: #b5812c;
+  --err: #c0392b; --err-rgb: 192,57,43; --err-soft: #c0392b;
+  --blue: #2f6b8a; --blue-hi: #3f7f9e;
+  --well: #f4f1e8; --track: #e4dfd1; --bar-a: #c0392b; --bar-b: #e05a3f;
+  --chip-bg: #f0ece0; --chip-border: #d8d2c2; --chip-text: #6f6656;
+  --console-text: #4a4438; --ts: #8a8071; --tag: #6f6656;
+  --scrim: rgba(40, 34, 24, .45);
+  --radius: 2px; --radius-s: 2px;
+  --font-ui: "Consolas", "Courier New", "Microsoft YaHei UI", monospace;
+  --shell: radial-gradient(#cfcabe 1px, transparent 1px) 0 0 / 6px 6px, #d9d4c9;
+  --shell-color: #d9d4c9;
+  --panel-shadow: 0 2px 6px rgba(0,0,0,.14);
+}
+:root[data-theme="24"] .panel-head,
+:root[data-theme="24"] .thead { border-bottom: 1px dashed var(--border); }
+
+/* ---------------------------------------------------------- 27 Blender */
+:root[data-theme="27"] {
+  --bg: #1d1d1d; --bg2: #282828; --panel: #232323; --panel2: #2b2b2b; --panel3: #333333;
+  --border: #151515; --border-soft: #2a2a2a; --border-hi: #3d3d3d;
+  --text: #e5e5e5; --dim: #9a9a9a; --dim2: #737373;
+  --accent: #4772b3; --accent-rgb: 71,114,179; --accent-dim: #2f5183;
+  --accent-a: #5b8ad4; --accent-b: #4772b3; --accent-a-hi: #6a99e0; --accent-b-hi: #5580c4;
+  --accent-border: #2f5183; --accent-ink: #fff;
+  --ok: #4ea24e; --ok-rgb: 78,162,78; --ok-soft: #6cb96c; --ok-a: #3f8f3f; --ok-b: #4ea24e;
+  --warn: #e87d0d; --warn-rgb: 232,125,13; --warn-soft: #f0954a;
+  --err: #e05a4a; --err-rgb: 224,90,74; --err-soft: #ef7d6d;
+  --blue: #5b8ad4; --blue-hi: #7aa8ee;
+  --well: #1a1a1a; --track: #1a1a1a; --bar-a: #4772b3; --bar-b: #5b8ad4;
+  --chip-bg: #2b2b2b; --chip-border: #363636; --chip-text: #9a9a9a;
+  --console-text: #b5b5b5; --ts: #6f6f6f; --tag: #8a8a8a;
+  --radius: 4px; --radius-s: 4px;
+  --shell-color: #1d1d1d;
+}
+
+/* ---------------------------------------------------------- 32 手绘马克笔 */
+:root[data-theme="32"] {
+  --bg: #fff8d6; --bg2: #fffdf2; --panel: #fffef2; --panel2: #fff9e2; --panel3: #fff3c4;
+  --border: #c9bd8e; --border-soft: #efe3b0; --border-hi: #a89a6a;
+  --text: #2b2413; --dim: #6b6146; --dim2: #8a7f4e;
+  --accent: #ff5c8a; --accent-rgb: 255,92,138; --accent-dim: #e8c3cf;
+  --accent-a: #ff7ba0; --accent-b: #f04a79; --accent-a-hi: #ff90b0; --accent-b-hi: #ff5c8a;
+  --accent-border: #c93564; --accent-ink: #fff;
+  --ok: #4a9a4a; --ok-rgb: 74,154,74; --ok-soft: #5cb35c; --ok-a: #4a9a4a; --ok-b: #6cc06c;
+  --warn: #d99a1a; --warn-rgb: 217,154,26; --warn-soft: #e0aa30;
+  --err: #e2513f; --err-rgb: 226,81,63; --err-soft: #e2513f;
+  --blue: #4a90d9; --blue-hi: #5aa0e9;
+  --well: #fffdf5; --track: #efe3b0; --bar-a: #ff5c8a; --bar-b: #ff9ab5;
+  --chip-bg: #fff3c4; --chip-border: #e0d4a0; --chip-text: #6b6146;
+  --console-text: #4d4426; --ts: #8a7f4e; --tag: #6b6146;
+  --scrim: rgba(60, 50, 20, .4);
+  --radius: 14px; --radius-s: 10px;
+  --font-ui: "Comic Sans MS", "Segoe Print", "Microsoft YaHei UI", cursive;
+  --shell: radial-gradient(#efe3ac 1.4px, transparent 1.4px) 0 0 / 14px 14px, #fff8d6;
+  --shell-color: #fff8d6;
+}
+
+/* ---------------------------------------------------------- 33 赛博霓虹 */
+:root[data-theme="33"] {
+  --bg: #05060c; --bg2: #080a12; --panel: #0a0d17; --panel2: #0d111d; --panel3: #131a2b;
+  --border: #202844; --border-soft: #151a2b; --border-hi: #2b3556;
+  --text: #dfe9ff; --dim: #6b7a9c; --dim2: #93a3c4;
+  --accent: #00f0ff; --accent-rgb: 0,240,255; --accent-dim: #06545c;
+  --accent-a: #35f7ff; --accent-b: #00c8d8; --accent-a-hi: #6bfaff; --accent-b-hi: #12dcea;
+  --accent-border: #00f0ff; --accent-ink: #031016;
+  --ok: #3ef0a0; --ok-rgb: 62,240,160; --ok-soft: #7affc4; --ok-a: #17c079; --ok-b: #3ef0a0;
+  --warn: #f5d90a; --warn-rgb: 245,217,10; --warn-soft: #ffe94a;
+  --err: #ff2b4a; --err-rgb: 255,43,74; --err-soft: #ff6d84;
+  --blue: #ff2bd6; --blue-hi: #ff7ae6;
+  --well: #04060b; --track: #0a0d17; --bar-a: #00f0ff; --bar-b: #ff2bd6;
+  --chip-bg: #0d111d; --chip-border: #202844; --chip-text: #93a3c4;
+  --console-text: #93a3c4; --ts: #3d4a6b; --tag: #5b6a8c;
+  --scrim: rgba(2, 3, 8, .82);
+  --radius: 0px; --radius-s: 0px;
+  --shell: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px) 0 0 / 44px 44px,
+           linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px) 0 0 / 44px 44px, #05060c;
+  --shell-color: #05060c;
+  --panel-shadow: 0 0 18px rgba(0, 240, 255, .16), inset 0 0 22px rgba(0, 240, 255, .05);
+}
+
+/* ---------------------------------------------------------- 34 赛博酸绿 */
+:root[data-theme="34"] {
+  --bg: #060a06; --bg2: #080d08; --panel: #0b120b; --panel2: #0f170f; --panel3: #142014;
+  --border: #223a18; --border-soft: #16240f; --border-hi: #2f5122;
+  --text: #e6ffd8; --dim: #6f8a5c; --dim2: #9db98a;
+  --accent: #7dff00; --accent-rgb: 125,255,0; --accent-dim: #436e00;
+  --accent-a: #8dff2b; --accent-b: #62d400; --accent-a-hi: #a6ff57; --accent-b-hi: #74e80a;
+  --accent-border: #7dff00; --accent-ink: #081400;
+  --ok: #7dff00; --ok-rgb: 125,255,0; --ok-soft: #a6ff57; --ok-a: #56b800; --ok-b: #7dff00;
+  --warn: #ffe04a; --warn-rgb: 255,224,74; --warn-soft: #ffeb80;
+  --err: #ff3b2b; --err-rgb: 255,59,43; --err-soft: #ff7a6a;
+  --blue: #00ffc8; --blue-hi: #6dffdd;
+  --well: #050905; --track: #0b120b; --bar-a: #7dff00; --bar-b: #00ffc8;
+  --chip-bg: #0f170f; --chip-border: #223a18; --chip-text: #9db98a;
+  --console-text: #9db98a; --ts: #3d5230; --tag: #587a44;
+  --scrim: rgba(2, 6, 2, .82);
+  --radius: 0px; --radius-s: 0px;
+  --shell: linear-gradient(rgba(125,255,0,.03) 1px, transparent 1px) 0 0 / 40px 40px,
+           linear-gradient(90deg, rgba(125,255,0,.03) 1px, transparent 1px) 0 0 / 40px 40px, #060a06;
+  --shell-color: #060a06;
+  --panel-shadow: 0 0 18px rgba(125, 255, 0, .16), inset 0 0 22px rgba(125, 255, 0, .05);
+}
+
+/* ---------------------------------------------------------- 45 GBA DMG */
+:root[data-theme="45"] {
+  --bg: #9bbc0f; --bg2: #8bac0f; --panel: #8bac0f; --panel2: #9bbc0f; --panel3: #a8c924;
+  --border: #0f380f; --border-soft: #306230; --border-hi: #0f380f;
+  --text: #0f380f; --dim: #306230; --dim2: #306230;
+  --accent: #0f380f; --accent-rgb: 15,56,15; --accent-dim: #306230;
+  --accent-a: #306230; --accent-b: #0f380f; --accent-a-hi: #3c743c; --accent-b-hi: #0f380f;
+  --accent-border: #0f380f; --accent-ink: #9bbc0f;
+  --ok: #0f380f; --ok-rgb: 15,56,15; --ok-soft: #0f380f; --ok-a: #0f380f; --ok-b: #306230;
+  --warn: #0f380f; --warn-rgb: 15,56,15; --warn-soft: #0f380f;
+  --err: #0f380f; --err-rgb: 15,56,15; --err-soft: #0f380f;
+  --blue: #0f380f; --blue-hi: #306230;
+  --well: #8bac0f; --track: #306230; --bar-a: #0f380f; --bar-b: #306230;
+  --chip-bg: #8bac0f; --chip-border: #0f380f; --chip-text: #0f380f;
+  --console-text: #0f380f; --ts: #306230; --tag: #306230;
+  --scrim: rgba(15, 56, 15, .4);
+  --radius: 0px; --radius-s: 0px;
+  --font-ui: "RG Pixel", "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  --font-mono: "RG Pixel", Consolas, monospace;
+  --shell: radial-gradient(#8bac0f 1px, transparent 1px) 0 0 / 4px 4px, #9bbc0f;
+  --shell-color: #9bbc0f;
+}
+:root[data-theme="45"] .panel,
+:root[data-theme="45"] .dialog { border-width: 2px; }
+:root[data-theme="45"] button { border-width: 2px; box-shadow: 2px 2px 0 var(--border); }
+:root[data-theme="45"] button:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* ---------------------------------------------------------- 46 GBA 外壳 */
+:root[data-theme="46"] {
+  --bg: #1b1e24; --bg2: #3a3f47; --panel: #2f343b; --panel2: #3a3f47; --panel3: #454b53;
+  --border: #14171c; --border-soft: #262b31; --border-hi: #55606a;
+  --text: #cfe3b8; --dim: #8fa87a; --dim2: #6b7f5c;
+  --accent: #9bbc0f; --accent-rgb: 155,188,15; --accent-dim: #4a5a1a;
+  --accent-a: #b3d424; --accent-b: #8bac0f; --accent-a-hi: #c8e83a; --accent-b-hi: #9bbc0f;
+  --accent-border: #56660f; --accent-ink: #101505;
+  --ok: #9bbc0f; --ok-rgb: 155,188,15; --ok-soft: #c8e83a; --ok-a: #7a9a10; --ok-b: #9bbc0f;
+  --warn: #d8c23a; --warn-rgb: 216,194,58; --warn-soft: #e8d45a;
+  --err: #e0603a; --err-rgb: 224,96,58; --err-soft: #f0805a;
+  --blue: #8fbfe0; --blue-hi: #b0d8f0;
+  --well: #0f1a0c; --track: #0f1a0c; --bar-a: #7a9a10; --bar-b: #c8e02a;
+  --chip-bg: #262b31; --chip-border: #3a4048; --chip-text: #8fa87a;
+  --console-text: #a8c48c; --ts: #5c7048; --tag: #7a9060;
+  --scrim: rgba(8, 10, 6, .75);
+  --radius: 10px; --radius-s: 7px;
+  --font-ui: "RG Pixel", "Cascadia Mono", "Microsoft YaHei UI", monospace;
+  --shell: linear-gradient(180deg, #4e545c, #343a41 60%, #22262b);
+  --shell-color: #22262b;
+  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 0 rgba(0,0,0,.45), 0 5px 14px rgba(0,0,0,.5);
+  --inset: 10px;
+}
+
+/* ---------------------------------------------------------- 50 发票复写联 */
+:root[data-theme="50"] {
+  --bg: #ccd4dc; --bg2: #eef3f8; --panel: #eef3f8; --panel2: #e3ebf2; --panel3: #d8e2ec;
+  --border: #b8c4d0; --border-soft: #d5dee8; --border-hi: #9fb0c0;
+  --text: #1e2a38; --dim: #5c6b7a; --dim2: #6b7a8a;
+  --accent: #b03a48; --accent-rgb: 176,58,72; --accent-dim: #e0c2c7;
+  --accent-a: #c4485a; --accent-b: #9e2f3c; --accent-a-hi: #d45a6a; --accent-b-hi: #b03a48;
+  --accent-border: #7d2733; --accent-ink: #fff;
+  --ok: #2f6b5a; --ok-rgb: 47,107,90; --ok-soft: #3f7f6c; --ok-a: #2f6b5a; --ok-b: #4a8f7a;
+  --warn: #8a6a1a; --warn-rgb: 138,106,26; --warn-soft: #9a7a2a;
+  --err: #b03a48; --err-rgb: 176,58,72; --err-soft: #b03a48;
+  --blue: #2f5f8a; --blue-hi: #3f7aa8;
+  --well: #f4f8fc; --track: #d5dee8; --bar-a: #b03a48; --bar-b: #cf6070;
+  --chip-bg: #e3ebf2; --chip-border: #c9d5e0; --chip-text: #5c6b7a;
+  --console-text: #33414f; --ts: #7a8896; --tag: #5c6b7a;
+  --scrim: rgba(30, 42, 56, .4);
+  --radius: 2px; --radius-s: 2px;
+  --font-ui: "Palatino Linotype", "Book Antiqua", "Songti SC", "Microsoft YaHei UI", serif;
+  --shell-color: #ccd4dc;
+  --panel-shadow: 0 2px 6px rgba(0,0,0,.12);
+}
+
+/* ---------------------------------------------------------- 58 赛博终端 */
+:root[data-theme="58"] {
+  --bg: #050706; --bg2: #070a08; --panel: #080b09; --panel2: #0a0f0c; --panel3: #0d1410;
+  --border: #1a4a30; --border-soft: #123024; --border-hi: #2e8a5c;
+  --text: #9dfcbf; --dim: #4fa878; --dim2: #347a56;
+  --accent: #4dff9e; --accent-rgb: 77,255,158; --accent-dim: #16452c;
+  --accent-a: #6dffb0; --accent-b: #35d47e; --accent-a-hi: #8dffc4; --accent-b-hi: #45e08c;
+  --accent-border: #2e8a5c; --accent-ink: #021208;
+  --ok: #4dff9e; --ok-rgb: 77,255,158; --ok-soft: #8dffc4; --ok-a: #2e8a5c; --ok-b: #4dff9e;
+  --warn: #ffb02e; --warn-rgb: 255,176,46; --warn-soft: #ffc861;
+  --err: #ff5b4f; --err-rgb: 255,91,79; --err-soft: #ff8f86;
+  --blue: #4dff9e; --blue-hi: #8dffc4;
+  --well: #030504; --track: #030504; --bar-a: #2e8a5c; --bar-b: #4dff9e;
+  --chip-bg: #070c09; --chip-border: #1a4a30; --chip-text: #4fa878;
+  --console-text: #6fc79a; --ts: #2a6644; --tag: #3d8a5c;
+  --scrim: rgba(0, 6, 3, .85);
+  --radius: 0px; --radius-s: 0px;
+  --font-ui: "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+  --shell-color: #040605;
+  --overlay: repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  --overlay-op: .6;
+}
+:root[data-theme="58"] .panel,
+:root[data-theme="58"] .dialog { border-style: solid; }
+:root[data-theme="58"] .panel-head::before { content: "> "; color: var(--accent); }
+
+/* ---------------------------------------------------------- 69 CRT */
+:root[data-theme="69"] {
+  --bg: #03110b; --bg2: #05170f; --panel: #061a11; --panel2: #082013; --panel3: #0b2a19;
+  --border: #0d2b1e; --border-soft: #0a2216; --border-hi: #145c3a;
+  --text: #c8ffe0; --dim: #5fd39a; --dim2: #3d9a6c;
+  --accent: #6dffb0; --accent-rgb: 109,255,176; --accent-dim: #145c3a;
+  --accent-a: #8dffc8; --accent-b: #4ee89a; --accent-a-hi: #aaffd8; --accent-b-hi: #62f0a8;
+  --accent-border: #1f7a4e; --accent-ink: #021208;
+  --ok: #6dffb0; --ok-rgb: 109,255,176; --ok-soft: #aaffd8; --ok-a: #35a06a; --ok-b: #6dffb0;
+  --warn: #ffd08a; --warn-rgb: 255,208,138; --warn-soft: #ffe0b0;
+  --err: #ff9a86; --err-rgb: 255,154,134; --err-soft: #ffb4a4;
+  --blue: #7fe8ff; --blue-hi: #b0f4ff;
+  --well: #020b07; --track: #020b07; --bar-a: #35a06a; --bar-b: #6dffb0;
+  --chip-bg: #061a11; --chip-border: #0f3d28; --chip-text: #5fd39a;
+  --console-text: #7fd6a8; --ts: #2e6a4c; --tag: #46a074;
+  --scrim: rgba(0, 8, 4, .82);
+  --radius: 22px; --radius-s: 8px;
+  --inset: 14px;
+  --font-ui: "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace;
+  --shell: radial-gradient(ellipse at 50% 45%, #0b1410 0%, #050a08 55%, #101614 100%);
+  --shell-color: #050a08;
+  --overlay: repeating-linear-gradient(0deg, rgba(0,0,0,.46) 0 2px, transparent 2px 4px),
+             repeating-linear-gradient(0deg, rgba(109,255,176,.05) 0 1px, transparent 1px 4px),
+             radial-gradient(ellipse at 50% 46%, transparent 46%, rgba(0,0,0,.72) 100%),
+             linear-gradient(180deg, rgba(109,255,176,.10) 0%, transparent 14%, transparent 86%, rgba(0,0,0,.35) 100%);
+  --overlay-op: 1;
+  --panel-shadow: inset 0 0 34px rgba(109, 255, 176, .06), 0 0 22px rgba(109, 255, 176, .05);
+}
+:root[data-theme="69"] .app { border-radius: 18px; overflow: hidden; box-shadow: inset 0 0 70px rgba(0,0,0,.9); }
+:root[data-theme="69"] .panel { border-radius: 14px; }

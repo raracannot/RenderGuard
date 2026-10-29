@@ -1,0 +1,15 @@
+﻿/dist/
+/src-tauri/target/
+/src-tauri/gen/
+data/
+*.log
+/_test/*.png
+/_test/*.blend
+/_test/__pycache__/
+/skin_preview/
+.vscode/
+.idea/
+*.bak
+*.orig
+Thumbs.db
+desktop.ini
