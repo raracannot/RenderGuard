@@ -2,6 +2,8 @@
 
 Blender 批量渲染队列 + **崩溃自动续接**。单文件便携 exe，不需要安装 Python 或任何运行时（Windows 10/11 自带 WebView2）。
 
+> **不想编译？** 直接下 [便携版 v1.0.0](https://github.com/raracannot/RenderGuard/releases/latest)：解压，双击 `RenderGuard.exe`。
+
 ---
 
 ## 它解决什么问题
