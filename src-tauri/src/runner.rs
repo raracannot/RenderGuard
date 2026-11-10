@@ -121,6 +121,47 @@ fn classify(line: &str) -> &'static str {
     }
 }
 
+/// 任务实际会写到哪里：优先用覆盖项里的输出目录，否则从路径模板推出父目录。
+fn output_dir_of(job: &Job) -> Option<std::path::PathBuf> {
+    if let Some(d) = job
+        .overrides
+        .output_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(std::path::PathBuf::from(d));
+    }
+    let p = job.path_prefix.trim();
+    if p.is_empty() {
+        return None;
+    }
+    std::path::Path::new(p)
+        .parent()
+        .map(|x| x.to_path_buf())
+        .filter(|x| !x.as_os_str().is_empty())
+}
+
+/// 输出目录预检：能建、能写。渲染前 30 毫秒的事，省掉"渲了几分钟才发现写不进去"。
+fn check_output_dir(dir: &std::path::Path) -> Result<(), String> {
+    if !dir.exists() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("无法创建输出目录：{}（{}）", dir.display(), e))?;
+    }
+    let probe = dir.join(format!(".rg_write_probe_{}", std::process::id()));
+    match std::fs::write(&probe, b"rg") {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            Ok(())
+        }
+        Err(e) => Err(format!(
+            "输出目录不可写：{}（{}）。请换一个目录，或检查该目录是否被安全软件/同步盘保护、同名文件是否被占用",
+            dir.display(),
+            e
+        )),
+    }
+}
+
 fn parse_frame(line: &str) -> Option<i32> {
     let idx = line.find("Fra:")?;
     let rest = line[idx + 4..].trim_start();
@@ -228,6 +269,22 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
                 Some("静帧不支持视频格式输出，请改用图片格式".into()),
             );
             return;
+        }
+
+        // 输出目录预检：宁可在这里失败，也不要渲几分钟后再报 Permission denied
+        if let Some(dir) = output_dir_of(&j) {
+            if let Err(msg) = check_output_dir(&dir) {
+                emit_log(
+                    &app,
+                    &id,
+                    vec![LogLine {
+                        level: "error".into(),
+                        text: msg.clone(),
+                    }],
+                );
+                finalize(&app, &shared, &id, Instant::now(), Some(msg));
+                return;
+            }
         }
     }
 
@@ -819,10 +876,18 @@ fn run_segment(
         cmd.arg("-f").arg(job.still_frame.to_string());
     }
 
+    // 给子进程一个干净的工作目录：不少插件会往 CWD 写东西（例如 hot_node 的 autosave），
+    // 继承 exe 目录既污染安装位置，也容易和退出时的临时文件清理打架。
+    // 注意：CWD 与 TMP 必须是两个不同的目录 —— 设成同一个时，Blender 退出清理会发现
+    // "临时目录就是自己的当前目录"，删不掉又反复重试（实测单次刷出 18 万行日志）。
+    let work_dir = store::data_dir().join("cwd");
+    let _ = std::fs::create_dir_all(&work_dir);
+
     cmd.env("RG_JOB", &job_json_path)
         .env("RG_HEARTBEAT", &hb_path)
         .env("RG_OVERWRITE", if overwrite { "1" } else { "0" })
         .env("RG_CLEAN", if use_clean { "1" } else { "0" })
+        .current_dir(&work_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .creation_flags(winproc::no_window());
@@ -879,6 +944,8 @@ fn run_segment(
     let mut last_recount = Instant::now();
     let mut last_cpu_sample = Instant::now();
     let mut setup_failed = false;
+    let mut dup_text = String::new();
+    let mut dup_n: u32 = 0;
 
     if let Some(f) = logf.as_mut() {
         let _ = writeln!(
@@ -904,6 +971,17 @@ fn run_segment(
             if let Some(f) = parse_frame(&line) {
                 current = Some(f);
             }
+            // 连续重复行折叠：插件或 Blender 的清理循环可能刷出十几万行同样的输出
+            // （实测 "Unable to delete file" 单次 18 万行），既拖慢自身也把日志淹掉。
+            if line == dup_text {
+                dup_n += 1;
+                if dup_n > 8 {
+                    continue;
+                }
+            } else {
+                dup_text = line.clone();
+                dup_n = 0;
+            }
             if let Some(f) = logf.as_mut() {
                 let _ = writeln!(f, "{}", line);
             }
@@ -927,6 +1005,15 @@ fn run_segment(
                 while let Ok(raw) = rx.try_recv() {
                     let line = strip_ansi(&raw);
                     if !line.trim().is_empty() {
+                        if line == dup_text {
+                            dup_n += 1;
+                            if dup_n > 8 {
+                                continue;
+                            }
+                        } else {
+                            dup_text = line.clone();
+                            dup_n = 0;
+                        }
                         pending.push(LogLine {
                             level: classify(&line).to_string(),
                             text: line.clone(),
