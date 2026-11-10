@@ -149,6 +149,7 @@ struct SelfTestCfg {
     path_suffix: String,
     template_ok: bool,
     is_movie: bool,
+    clean: bool,
     resume: bool,
     auto_restart: bool,
     max_retries: u32,
@@ -173,6 +174,7 @@ impl Default for SelfTestCfg {
             path_suffix: String::new(),
             template_ok: false,
             is_movie: false,
+            clean: false,
             resume: true,
             auto_restart: true,
             max_retries: 3,
@@ -232,7 +234,10 @@ fn selftest(cfg_path: &str) -> i32 {
 
     let data = store::AppData {
         jobs: vec![job.clone()],
-        settings: Default::default(),
+        settings: store::Settings {
+            clean_blender: cfg.clean,
+            ..Default::default()
+        },
         running: Default::default(),
     };
     let shared: store::Shared = Arc::new(Mutex::new(data));

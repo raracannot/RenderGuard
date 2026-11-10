@@ -90,6 +90,9 @@ fn is_noise(l: &str) -> bool {
 
 fn classify(line: &str) -> &'static str {
     let l = line.to_ascii_lowercase();
+    if l.starts_with("rg_temp_warn") {
+        return "warn";
+    }
     if l.starts_with("rg_") || l.contains("rg_setup") || l.contains("rg_probe") {
         return if l.contains("failed") || l.contains("error") {
             "error"

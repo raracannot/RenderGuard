@@ -179,11 +179,35 @@ def apply_overrides(sc, ov):
             r.filepath = outdir.rstrip("\\/") + os.sep
 
 
+def check_tempdir():
+    """临时目录落在磁盘根目录时告警。
+
+    Blender 每个会话会在临时目录下建 blender_<pid>；一旦建不出来，它会退回临时目录本身。
+    如果那个目录是盘符根目录（例如用户在首选项里填了 R:\\），退出时它就会去清扫整块盘的根，
+    删不掉的文件会反复重试 —— 实测能刷出十几万行 "Unable to delete file"、白等一分钟，
+    而且能删掉的文件真的会被删掉。
+    """
+    try:
+        tmp = bpy.app.tempdir or ""
+    except Exception:
+        return
+    p = tmp.replace("\\", "/").rstrip("/")
+    is_drive_root = len(p) == 2 and p[1] == ":"
+    if is_drive_root:
+        print(
+            "RG_TEMP_WARN 该 Blender 的临时目录被设成了磁盘根目录 %s，"
+            "渲染退出时可能清扫根目录并卡住约 1 分钟；"
+            "请在 编辑 → 偏好设置 → 文件路径 → 临时文件 里清空这一项" % tmp
+        )
+
+
 def setup():
     job = load_job()
     sc = bpy.context.scene
     if sc is None:
         fail("没有活动场景")
+
+    check_tempdir()
 
     if os.environ.get("RG_CLEAN") == "1":
         restore_cycles_prefs(job)
