@@ -13,3 +13,6 @@ data/
 *.orig
 Thumbs.db
 desktop.ini
+
+# 静帧/矩阵测试的临时输出
+/_test/m*/

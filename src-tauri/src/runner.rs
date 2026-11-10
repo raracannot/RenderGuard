@@ -128,6 +128,73 @@ fn parse_frame(line: &str) -> Option<i32> {
     digits.parse().ok()
 }
 
+/// Blender 自己上报的写入次数（心跳里的 `written`）。
+/// 0 表示这一轮一个文件都没落盘 —— 比"事后扫目录"更能说明"到底写没写"。
+fn read_written(id: &str) -> u32 {
+    let p = store::data_dir().join("state").join(format!("{}.hb.json", id));
+    let Ok(text) = std::fs::read_to_string(&p) else {
+        return 0;
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return 0;
+    };
+    v.get("written")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0)
+        .min(u32::MAX as u64) as u32
+}
+
+/// 取渲染日志尾部若干条"有信息量"的行，用于失败时回显。
+/// 只认 Blender 自己的渲染输出行（带时间码 / Saved / ERROR / RG_*），
+/// 这样插件的 Python traceback 不会混进任务提示里。
+fn log_tail(id: &str, want: usize, started: Instant) -> Vec<String> {
+    let p = store::data_dir().join("logs").join(format!("{}.log", id));
+    // 日志比本次运行还老 → 说明这次根本没渲染（例如启动前的快速失败），
+    // 别把上一次的旧尾巴贴到这次的提示里。
+    let fresh = std::fs::metadata(&p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())
+        .map(|age| age <= started.elapsed() + std::time::Duration::from_millis(200))
+        .unwrap_or(false);
+    if !fresh {
+        return Vec::new();
+    }
+    let Ok(text) = std::fs::read_to_string(&p) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+    for line in text.lines().rev() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let low = t.to_ascii_lowercase();
+        // Blender 的渲染行以 "00:01.234  " 开头
+        let timed = t.len() > 9
+            && t.as_bytes()[2] == b':'
+            && t.as_bytes()[5] == b'.'
+            && t[..2].chars().all(|c| c.is_ascii_digit());
+        let useful = timed
+            || low.contains("error")
+            || low.contains("saved:")
+            || low.contains("skipping")
+            || t.starts_with("RG_");
+        if !useful {
+            continue;
+        }
+        if low.contains("mp7tools") || low.contains("blender_ctl") {
+            continue;
+        }
+        out.push(t.to_string());
+        if out.len() >= want {
+            break;
+        }
+    }
+    out.reverse();
+    out
+}
+
 // ---------------------------------------------------------------- 生命周期
 
 pub fn start(app: Option<AppHandle>, shared: Shared, id: String) {
@@ -138,6 +205,31 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
     let stop = match begin(&app, &shared, &id) {        Some(f) => f,
         None => return,
     };
+
+    // 静帧 + 视频格式：Blender 根本不支持把单帧写成视频，会直接报错退出。
+    // 与其让用户看着 3 轮失败，不如在启动前就说清楚。
+    if let Some(j) = snapshot(&shared, &id) {
+        if j.is_movie && !j.animation {
+            emit_log(
+                &app,
+                &id,
+                vec![LogLine {
+                    level: "error".into(),
+                    text: "静帧不能输出视频格式：单帧写不成视频。请改用 PNG / EXR 等图片格式，\
+或把帧范围设成一帧并用「动画」模式。"
+                        .into(),
+                }],
+            );
+            finalize(
+                &app,
+                &shared,
+                &id,
+                Instant::now(),
+                Some("静帧不支持视频格式输出，请改用图片格式".into()),
+            );
+            return;
+        }
+    }
 
     let started = Instant::now();
     let mut restarts: u32 = 0;
@@ -160,12 +252,22 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
         }
 
         // 计算下一个连续区段
+        // 静帧特殊处理：不按"文件已存在"跳过 —— 单帧重渲很便宜，而"点了开始却什么都没发生"
+        // 是最容易被当成 bug 的行为（Blender 会打印 Skipping existing frame 且退出码为 0）。
         let frames = job.frames();
-        let todo: Vec<i32> = frames
-            .iter()
-            .copied()
-            .filter(|f| !job.is_done(*f) && !job.failed_frames.contains(f))
-            .collect();
+        let todo: Vec<i32> = if job.animation {
+            frames
+                .iter()
+                .copied()
+                .filter(|f| !job.is_done(*f) && !job.failed_frames.contains(f))
+                .collect()
+        } else {
+            frames
+                .iter()
+                .copied()
+                .filter(|f| !job.failed_frames.contains(f))
+                .collect()
+        };
         if todo.is_empty() {
             break;
         }
@@ -184,11 +286,14 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
             }
         }
 
-        // 第一次是否覆盖，由 resume 决定；之后一律跳过，保证进度能累积
-        let overwrite = first_attempt && !job.resume;
+        // 第一次是否覆盖，由 resume 决定；之后一律跳过，保证进度能累积。
+        // 静帧永远覆盖：续接对单帧没有意义，反而会让"重新渲染"变成空操作。
+        let overwrite = first_attempt && (!job.resume || !job.animation);
         first_attempt = false;
 
         let outcome = run_segment(&app, &shared, &job, seg_start, seg_end, overwrite, &stop);
+        // Blender 自己上报的写入次数：0 表示这一轮一个文件都没写出来
+        let written = read_written(&job.id);
 
         if stop.load(Ordering::Relaxed) || matches!(outcome.end, SegEnd::Stopped) {
             break;
@@ -209,6 +314,55 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
             SegEnd::Exited(0) => {
                 // 正常结束：清理坏帧，统计进度
                 let fresh = snapshot(&shared, &id).unwrap_or_else(|| job.clone());
+
+                // 视频/无模板任务：frame_path 恒为 None，靠"文件已存在"永远判不完。
+                // 这里改用 Blender 上报的写入次数 —— 写出过就是完成。
+                if !fresh.template_ok {
+                    if written > 0 {
+                        if let Ok(mut s) = shared.lock() {
+                            if let Some(j) = s.jobs.iter_mut().find(|j| j.id == id) {
+                                j.progress.done = j.progress.total.max(1);
+                                j.progress.percent = 100.0;
+                                j.failed_frames.clear();
+                                j.progress.message = "已写出视频文件".into();
+                            }
+                            let _ = store::save_jobs(&s.jobs);
+                        }
+                        emit_log(
+                            &app,
+                            &id,
+                            vec![LogLine {
+                                level: "ok".into(),
+                                text: "视频文件已写出，按完成处理".into(),
+                            }],
+                        );
+                        break;
+                    }
+                    emit_log(
+                        &app,
+                        &id,
+                        vec![LogLine {
+                            level: "warn".into(),
+                            text: "Blender 退出码 0，但没有写出文件；请检查输出路径是否有写权限".into(),
+                        }],
+                    );
+                }
+
+                // 有模板但这一轮一个文件都没写：直接点明原因，省得只看得到"已停止"
+                if written == 0 && fresh.template_ok {
+                    let missing = (seg_start..=seg_end).any(|f| !fresh.is_done(f));
+                    if missing {
+                        emit_log(
+                            &app,
+                            &id,
+                            vec![LogLine {
+                                level: "warn".into(),
+                                text: "Blender 退出码 0，但本轮没有写出任何文件（常见原因：任务记录的输出路径与实际渲染路径不一致，或已有同名文件被跳过）".into(),
+                            }],
+                        );
+                    }
+                }
+
                 let mut bad = Vec::new();
                 if fresh.verify {
                     for f in seg_start..=seg_end {
@@ -237,6 +391,11 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
                     no_progress_rounds = 0;
                 }
                 last_done = done;
+
+                // 静帧只有一帧：确实写出来了就收工，别让它反复重渲
+                if !fresh.animation && written > 0 && bad.is_empty() {
+                    break;
+                }
 
                 if no_progress_rounds >= 3 {
                     // 反复跑完却没有任何进展：把当前这帧判定为坏帧，继续后面的
@@ -447,6 +606,8 @@ fn begin(app: &Option<AppHandle>, shared: &Shared, id: &str) -> Option<Arc<Atomi
 
 fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant, fatal: Option<String>) {
     let mut next = None;
+    // 失败时把日志尾部带回界面上，否则用户只看到"已停止"三个字
+    let tail = log_tail(id, 5, started);
     {
         let mut s = match shared.lock() {
             Ok(s) => s,
@@ -478,6 +639,15 @@ fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant
             };
             if j.status == JobStatus::Done {
                 j.progress.percent = 100.0;
+            }
+            // 失败/部分完成时附一行日志尾部，便于直接定位
+            if matches!(j.status, JobStatus::Failed | JobStatus::Partial) {
+                if let Some(hint) = tail.iter().rev().find(|s| !s.trim().is_empty()) {
+                    let short: String = hint.trim().chars().take(150).collect();
+                    if !short.is_empty() && !j.progress.message.contains(&short) {
+                        j.progress.message = format!("{} · {}", j.progress.message, short);
+                    }
+                }
             }
         }
         let snap = s.jobs.iter().find(|j| j.id == id).cloned();
