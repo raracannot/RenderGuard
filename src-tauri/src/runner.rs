@@ -946,6 +946,10 @@ fn run_segment(
     let mut setup_failed = false;
     let mut dup_text = String::new();
     let mut dup_n: u32 = 0;
+    let trace_start = Instant::now();
+    let mut trace_last = Instant::now();
+    let mut trace_last_count: u64 = 0;
+    let mut line_count: u64 = 0;
 
     if let Some(f) = logf.as_mut() {
         let _ = writeln!(
@@ -964,6 +968,16 @@ fn run_segment(
             let line = strip_ansi(&raw);
             if line.trim().is_empty() {
                 continue;
+            }
+            // 临时埋点：统计每秒收到的行数，定位"18 万行"是匀速刷出还是卡点爆发
+            if std::env::var("RG_TRACE").as_deref() == Ok("1") {
+                line_count += 1;
+                if trace_last.elapsed() >= Duration::from_secs(1) {
+                    let t = trace_start.elapsed().as_secs_f64();
+                    eprintln!("[trace] t={:.1}s 累计行={} 本秒={}", t, line_count, line_count - trace_last_count);
+                    trace_last = Instant::now();
+                    trace_last_count = line_count;
+                }
             }
             if line.contains("RG_SETUP_FAILED") {
                 setup_failed = true;
