@@ -13,6 +13,12 @@ use crate::model::Job;
 
 pub const PROBE_PY: &str = include_str!("py/probe.py");
 pub const BOOT_PY: &str = include_str!("py/boot.py");
+pub const PACK_PY: &str = include_str!("py/pack.py");
+
+/// 打包脚本的落地路径（供 pack 模块调用）
+pub fn pack_script() -> PathBuf {
+    data_dir().join("py").join("pack.py")
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
@@ -133,7 +139,8 @@ pub fn ensure_scripts() -> std::io::Result<(PathBuf, PathBuf)> {
     fs::create_dir_all(&py)?;
     let probe = py.join("probe.py");
     let boot = py.join("boot.py");
-    for (path, body) in [(&probe, PROBE_PY), (&boot, BOOT_PY)] {
+    let pack = py.join("pack.py");
+    for (path, body) in [(&probe, PROBE_PY), (&boot, BOOT_PY), (&pack, PACK_PY)] {
         let need = match fs::read(path) {
             Ok(old) => old != body.as_bytes(),
             Err(_) => true,

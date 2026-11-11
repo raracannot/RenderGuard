@@ -666,3 +666,43 @@ pub fn set_all_enabled(state: State<'_, Shared>, enabled: bool) -> Result<(), St
     }
     store::save_jobs(&s.jobs).map_err(|e| e.to_string())
 }
+
+// ---------------------------------------------------------------- 图片序列打包视频
+
+/// 开始打包：后台线程跑，进度通过 rg://pack 事件推送
+#[tauri::command]
+pub fn pack_start(app: AppHandle, state: State<'_, Shared>, cfg: crate::pack::PackCfg) -> Result<(), String> {
+    let blender = {
+        let s = state.lock().map_err(|e| e.to_string())?;
+        s.settings.default_blender.clone()
+    };
+    if blender.trim().is_empty() {
+        return Err("先在「设置 → Blender → 默认路径」里指定一个 Blender".into());
+    }
+    crate::pack::CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+    std::thread::spawn(move || {
+        let _ = crate::pack::run(Some(app), &blender, &cfg);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn pack_cancel() {
+    crate::pack::CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 选完文件夹先看一眼：多少张图、默认输出名是什么
+#[tauri::command]
+pub fn pack_preview(src_dir: String) -> serde_json::Value {
+    let count = crate::pack::count_frames(&src_dir);
+    let stem = std::path::Path::new(&src_dir)
+        .file_name()
+        .and_then(|x| x.to_str())
+        .unwrap_or("output")
+        .to_string();
+    let out = std::path::Path::new(&src_dir)
+        .parent()
+        .map(|p| p.join(format!("{}.mp4", stem)))
+        .unwrap_or_else(|| std::path::PathBuf::from(format!("{}.mp4", stem)));
+    serde_json::json!({ "count": count, "stem": stem, "outFile": out.to_string_lossy() })
+}

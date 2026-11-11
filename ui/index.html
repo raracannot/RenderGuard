@@ -42,6 +42,7 @@
           <button class="btn" id="btnAddFolder">文件夹</button>
           <button class="btn" id="btnImport">导入</button>
           <button class="btn" id="btnExport">导出</button>
+          <button class="btn" id="btnPack" title="把图片序列打包成一个视频">🎬 打包视频</button>
           <span class="sep"></span>
           <button class="btn primary" id="btnStartQueue" title="把所有已勾选的任务按队列顺序跑完">▶ 开始全队列</button>
           <button class="btn" id="btnStartSingle" title="只跑当前选中的那一个任务">▶ 仅渲染单项</button>
@@ -262,6 +263,120 @@
     <div class="dialog-foot">
       <button class="btn" id="dlgCancel">取消</button>
       <button class="btn primary" id="dlgSave">加入队列</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 打包视频弹窗 ============ -->
+<div class="overlay hidden" id="packOverlay">
+  <div class="dialog small pack-dialog">
+    <div class="dialog-head">
+      <span>打包视频</span>
+      <button class="ghost small" id="packClose">✕</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="section">
+        <div class="section-title">序列</div>
+
+        <div class="field">
+          <label for="packDir">序列文件夹</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="packDir" placeholder="包含 PNG / JPG 序列的文件夹" />
+              <button class="btn small" id="packBrowseDir">浏览</button>
+            </div>
+            <div class="field-hint" id="packCount">选好文件夹后会自动统计帧数</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="packOrder">排序规则</label>
+          <div class="field-ctl">
+            <select id="packOrder">
+              <option value="name_asc">名称正序（按数字大小，推荐）</option>
+              <option value="name_desc">名称倒序</option>
+              <option value="time_asc">修改时间正序</option>
+              <option value="time_desc">修改时间倒序</option>
+            </select>
+            <div class="field-hint">名称排序会把 f2 排在 f10 前面（按数字比较，不是按字符）</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">编码</div>
+
+        <div class="field">
+          <label for="packFps">帧率</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="number" id="packFps" class="num" value="30" min="1" max="240" />
+              <span class="unit">fps</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="packFormat">输出格式</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <select id="packFormat">
+                <option value="MPEG4">MP4</option>
+                <option value="MKV">MKV</option>
+                <option value="QUICKTIME">MOV</option>
+                <option value="WEBM">WebM</option>
+              </select>
+              <select id="packCodec">
+                <option value="H264">H.264</option>
+                <option value="H265">H.265</option>
+                <option value="AV1">AV1</option>
+              </select>
+              <select id="packQuality">
+                <option value="HIGH">高画质</option>
+                <option value="MEDIUM">标准</option>
+                <option value="LOW">小体积</option>
+                <option value="PERC_LOSSLESS">接近无损</option>
+                <option value="LOSSLESS">无损</option>
+              </select>
+            </div>
+            <div class="field-hint">用的是 Blender 内置编码器，不需要另外装 ffmpeg</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="packAudio">音轨</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="packAudio" placeholder="留空 = 不要音轨" />
+              <button class="btn small" id="packBrowseAudio">选择</button>
+              <button class="btn small" id="packClearAudio">清除</button>
+            </div>
+            <div class="field-hint">可以选音频文件，也可以选带音轨的视频，只取它的声音</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="packOut">输出文件</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="packOut" placeholder="默认与文件夹同名" />
+              <button class="btn small" id="packBrowseOut">另存为</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-ctl">
+          <div class="prog pack-prog" style="--p:0"><div class="bar"><i style="width:0%"></i></div><span id="packMsg">待开始</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-foot">
+      <button class="btn" id="packCancel">取消</button>
+      <button class="btn primary" id="packStart">开始打包</button>
     </div>
   </div>
 </div>

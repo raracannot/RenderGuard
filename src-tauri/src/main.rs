@@ -4,6 +4,7 @@ mod commands;
 mod filecheck;
 mod model;
 mod openapp;
+mod pack;
 mod probe;
 mod runner;
 mod store;
@@ -23,8 +24,24 @@ fn main() {
 
     let args: Vec<String> = std::env::args().collect();
 
-    if let Some(i) = args.iter().position(|a| a == "--enqueue") {
+    if let Some(i) = args.iter().position(|a| a == "--pack") {
         let Some(path) = args.get(i + 1) else {
+            eprintln!("用法: renderguard.exe --pack <config.json>");
+            std::process::exit(2);
+        };
+        match pack_cli(path) {
+            Ok(out) => {
+                println!("打包完成：{}", out);
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("打包失败：{}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--enqueue") {        let Some(path) = args.get(i + 1) else {
             eprintln!("用法: renderguard.exe --enqueue <job.json>");
             std::process::exit(2);
         };
@@ -64,6 +81,18 @@ fn main() {
     }
 
     gui();
+}
+
+/// 命令行打包：读配置 → 用设置里的 Blender 编码
+fn pack_cli(path: &str) -> Result<String, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败：{}", path, e))?;
+    let cfg: pack::PackCfg =
+        serde_json::from_str(&text).map_err(|e| format!("解析打包配置失败：{}", e))?;
+    let blender = store::load_settings().default_blender;
+    if blender.trim().is_empty() {
+        return Err("设置里没有默认 Blender 路径".into());
+    }
+    pack::run(None, &blender, &cfg)
 }
 
 /// 把外部任务文件投递到 inbox；运行中的程序会在 2 秒内收编
@@ -228,6 +257,9 @@ fn gui() {
             commands::start_queue,
             commands::start_single,
             commands::set_all_enabled,
+            commands::pack_start,
+            commands::pack_cancel,
+            commands::pack_preview,
         ])
         .run(tauri::generate_context!())
         .expect("RenderGuard 启动失败");

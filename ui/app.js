@@ -1531,6 +1531,23 @@ async function boot() {
 
   await listen("rg://notice", (e) => showNotice(e.payload || {}));
 
+  await listen("rg://pack", (e) => {
+    const st = e.payload || {};
+    setPackProgress(st.percent || 0, st.message || "");
+    if (!st.running) {
+      const start = $("packStart");
+      const cancel = $("packCancel");
+      if (start) start.disabled = false;
+      if (cancel) cancel.disabled = true;
+      if (st.ok) {
+        setPackProgress(100, st.message || "已完成");
+        toast("打包完成：" + (st.outFile || ""));
+      } else {
+        toast("打包失败：" + (st.message || "未知错误"), "err");
+      }
+    }
+  });
+
   await listen("tauri://drag-drop", async (e) => {
     const paths = (e.payload && e.payload.paths) || [];
     if (!paths.length) return;
@@ -1554,4 +1571,135 @@ async function boot() {
   log("RenderGuard 已就绪 · 队列 " + S.order.length + " 个任务", "ok");
 }
 
+wirePack();
 boot();
+
+/* ------------------------------------------------------------ 打包视频 */
+
+const PACK_PREF_KEY = "rg.packPrefs";
+
+function loadPackPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(PACK_PREF_KEY) || "{}");
+  } catch (_) {
+    return {};
+  }
+}
+
+function savePackPrefs() {
+  const p = {
+    fps: parseInt($("packFps").value, 10) || 30,
+    order: $("packOrder").value,
+    format: $("packFormat").value,
+    codec: $("packCodec").value,
+    quality: $("packQuality").value,
+    dir: $("packDir").value.trim(),
+  };
+  try {
+    localStorage.setItem(PACK_PREF_KEY, JSON.stringify(p));
+  } catch (_) {}
+}
+
+function openPack() {
+  const p = loadPackPrefs();
+  $("packFps").value = p.fps || 30;
+  $("packOrder").value = p.order || "name_asc";
+  $("packFormat").value = p.format || "MPEG4";
+  $("packCodec").value = p.codec || "H264";
+  $("packQuality").value = p.quality || "MEDIUM";
+  $("packDir").value = p.dir || "";
+  $("packAudio").value = "";
+  $("packOut").value = "";
+  $("packCount").textContent = "选好文件夹后会自动统计帧数";
+  setPackProgress(0, "待开始");
+  $("packStart").disabled = false;
+  $("packCancel").disabled = true;
+  $("packOverlay").classList.remove("hidden");
+  if (p.dir) probePackDir();
+}
+
+function setPackProgress(pct, msg) {
+  const box = document.querySelector(".pack-prog");
+  if (!box) return;
+  const p = Math.max(0, Math.min(100, pct || 0));
+  box.style.setProperty("--p", p.toFixed(1));
+  const bar = box.querySelector(".bar i");
+  if (bar) bar.style.width = p.toFixed(1) + "%";
+  $("packMsg").textContent = msg;
+}
+
+async function probePackDir() {
+  const dir = $("packDir").value.trim();
+  if (!dir) return;
+  try {
+    const r = await invoke("pack_preview", { srcDir: dir });
+    $("packCount").textContent = r.count
+      ? `${r.count} 张图 · 默认输出 ${r.stem}.mp4`
+      : "这个文件夹里没找到图片（png/jpg/tif/bmp/webp/tga）";
+    if (!$("packOut").value.trim()) $("packOut").value = r.outFile || "";
+  } catch (e) {
+    $("packCount").textContent = "读取失败：" + String(e).slice(0, 100);
+  }
+}
+
+async function startPack() {
+  const cfg = {
+    srcDir: $("packDir").value.trim(),
+    outFile: $("packOut").value.trim(),
+    fps: parseInt($("packFps").value, 10) || 30,
+    order: $("packOrder").value,
+    format: $("packFormat").value,
+    codec: $("packCodec").value,
+    quality: $("packQuality").value,
+    audio: $("packAudio").value.trim(),
+    bg: "#0a0a0a",
+  };
+  if (!cfg.srcDir) return toast("请先选择序列文件夹", "err");
+  savePackPrefs();
+  $("packStart").disabled = true;
+  $("packCancel").disabled = false;
+  setPackProgress(0, "启动中…");
+  try {
+    await invoke("pack_start", { cfg });
+  } catch (e) {
+    $("packStart").disabled = false;
+    $("packCancel").disabled = true;
+    toast(String(e).slice(0, 200), "err");
+  }
+}
+
+function wirePack() {
+  $("btnPack").onclick = openPack;
+  $("packClose").onclick = () => $("packOverlay").classList.add("hidden");
+  $("packBrowseDir").onclick = async () => {
+    const p = await dlg.open({ directory: true });
+    if (!p) return;
+    $("packDir").value = Array.isArray(p) ? p[0] : p;
+    $("packOut").value = "";
+    probePackDir();
+  };
+  $("packBrowseAudio").onclick = async () => {
+    const p = await dlg.open({
+      filters: [
+        { name: "音频/视频", extensions: ["mp3", "wav", "flac", "m4a", "aac", "ogg", "mp4", "mov", "mkv"] },
+      ],
+    });
+    if (!p) return;
+    $("packAudio").value = Array.isArray(p) ? p[0] : p;
+  };
+  $("packClearAudio").onclick = () => { $("packAudio").value = ""; };
+  $("packBrowseOut").onclick = async () => {
+    const p = await dlg.save({
+      defaultPath: $("packOut").value || "output.mp4",
+      filters: [{ name: "视频", extensions: ["mp4", "mkv", "mov", "webm"] }],
+    });
+    if (!p) return;
+    $("packOut").value = Array.isArray(p) ? p[0] : p;
+  };
+  $("packStart").onclick = startPack;
+  $("packCancel").onclick = async () => {
+    await invoke("pack_cancel");
+    setPackProgress(0, "正在取消…");
+  };
+  $("packDir").addEventListener("change", probePackDir);
+}
