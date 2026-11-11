@@ -539,3 +539,47 @@ pub fn log_path(id: String) -> String {
 pub fn data_dir() -> String {
     store::data_dir().to_string_lossy().to_string()
 }
+
+// ---------------------------------------------------------------- 缩略图 / 任务详情
+
+fn b64(bytes: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+/// 取第一张已完成的成品做缩略图（限 3 MB 以内，避免 IPC 太大）
+#[tauri::command]
+pub fn job_thumb(state: State<'_, Shared>, id: String) -> Result<Option<String>, String> {
+    let job = {
+        let s = state.lock().map_err(|e| e.to_string())?;
+        s.jobs.iter().find(|j| j.id == id).cloned()
+    };
+    let Some(j) = job else { return Ok(None) };
+    for f in j.frames().iter().take(48) {
+        let Some(p) = j.frame_path(*f) else { continue };
+        let Ok(meta) = std::fs::metadata(&p) else { continue };
+        if meta.len() == 0 || meta.len() > 3 * 1024 * 1024 {
+            continue;
+        }
+        let Ok(bytes) = std::fs::read(&p) else { continue };
+        let lower = p.to_string_lossy().to_ascii_lowercase();
+        let mime = if lower.ends_with(".png") {
+            "image/png"
+        } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+            "image/jpeg"
+        } else {
+            return Ok(None);
+        };
+        return Ok(Some(format!("data:{};base64,{}", mime, b64(&bytes))));
+    }
+    Ok(None)
+}

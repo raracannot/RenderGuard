@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 
 use std::ffi::c_void;
+use std::os::windows::ffi::OsStrExt;
 use std::sync::OnceLock;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -68,6 +69,12 @@ extern "system" {
     ) -> i32;
     fn CreateJobObjectW(attrs: *mut c_void, name: *const u16) -> *mut c_void;
     fn SetInformationJobObject(job: *mut c_void, class: i32, info: *mut c_void, len: u32) -> i32;
+    fn GetDiskFreeSpaceExW(
+        dir: *const u16,
+        free_available: *mut u64,
+        total: *mut u64,
+        total_free: *mut u64,
+    ) -> i32;
     fn AssignProcessToJobObject(job: *mut c_void, process: *mut c_void) -> i32;
 }
 
@@ -216,5 +223,20 @@ pub fn exit_text(rc: i32) -> String {
     match name {
         Some(n) => format!("{} (0x{:08X})", n, u),
         None => format!("错误码 0x{:08X}", u),
+    }
+}
+
+/// 目标路径所在卷的可用字节数；拿不到返回 None
+pub fn free_space(path: &std::path::Path) -> Option<u64> {
+    let mut w: Vec<u16> = path.as_os_str().encode_wide().collect();
+    w.push(0);
+    let mut free: u64 = 0;
+    let mut total: u64 = 0;
+    let mut total_free: u64 = 0;
+    let ok = unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut free, &mut total, &mut total_free) };
+    if ok == 0 {
+        None
+    } else {
+        Some(free)
     }
 }

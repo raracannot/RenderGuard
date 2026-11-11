@@ -18,8 +18,27 @@ use tauri::Emitter;
 fn main() {
     store::ensure_dirs().ok();
     store::ensure_scripts().ok();
+    // 清掉一天前的 Blender 会话临时目录残留（被强杀时不会自己删）
+    store::cleanup_stale_temp();
 
     let args: Vec<String> = std::env::args().collect();
+
+    if let Some(i) = args.iter().position(|a| a == "--enqueue") {
+        let Some(path) = args.get(i + 1) else {
+            eprintln!("用法: renderguard.exe --enqueue <job.json>");
+            std::process::exit(2);
+        };
+        match enqueue_file(path) {
+            Ok(id) => {
+                println!("已投递任务 {}，程序启动后会自动加入队列", id);
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("投递失败：{}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     if let Some(i) = args.iter().position(|a| a == "--selftest") {
         if let Some(path) = args.get(i + 1) {
@@ -47,11 +66,48 @@ fn main() {
     gui();
 }
 
+/// 把外部任务文件投递到 inbox；运行中的程序会在 2 秒内收编
+fn enqueue_file(path: &str) -> Result<String, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败：{}", path, e))?;
+    let mut job: model::Job =
+        serde_json::from_str(&text).map_err(|e| format!("解析任务文件失败：{}", e))?;
+    if job.blend.trim().is_empty() {
+        return Err("任务文件里缺少 blend 字段".into());
+    }
+    if job.id.trim().is_empty() {
+        job.id = format!(
+            "cli{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+    }
+    if job.name.trim().is_empty() {
+        job.name = std::path::Path::new(&job.blend)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("任务")
+            .to_string();
+    }
+    job.status = model::JobStatus::Queued;
+    job.created = runner::now_secs();
+    let out = store::inbox_dir().join(format!("{}.json", job.id));
+    store::write_json(&out, &job).map_err(|e| e.to_string())?;
+    Ok(job.id)
+}
+
 fn gui() {
     winproc::init_kill_on_close_job();
 
+    let mut jobs = store::load_jobs();
+    let incoming = store::drain_inbox();
+    if !incoming.is_empty() {
+        jobs.extend(incoming);
+        let _ = store::save_jobs(&jobs);
+    }
     let data = store::AppData {
-        jobs: store::load_jobs(),
+        jobs,
         settings: store::load_settings(),
         running: Default::default(),
     };
@@ -100,6 +156,45 @@ fn gui() {
                 if changed {
                     let _ = handle.emit("rg://jobs-changed", ());
                 }
+
+                // 启动后自动接管队列（只对排队中的任务生效，受 queueAuto / 并发上限约束）
+                let h = handle.clone();
+                let s = shared2.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    crate::runner::schedule_next(&Some(h), &s);
+                });
+            });
+
+            // inbox 守护：外部 CLI 投递的任务每 2 秒收编一次
+            let handle_in = app.handle().clone();
+            let shared_in = shared.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let incoming = store::drain_inbox();
+                if incoming.is_empty() {
+                    continue;
+                }
+                {
+                    let Ok(mut s) = shared_in.lock() else { continue };
+                    for mut j in incoming {
+                        if j.id.trim().is_empty() {
+                            j.id = format!("in{}", runner::now_secs());
+                        }
+                        j.status = model::JobStatus::Queued;
+                        j.created = runner::now_secs();
+                        if j.name.trim().is_empty() {
+                            j.name = std::path::Path::new(&j.blend)
+                                .file_stem()
+                                .and_then(|x| x.to_str())
+                                .unwrap_or("任务")
+                                .to_string();
+                        }
+                        s.jobs.push(j);
+                    }
+                    let _ = store::save_jobs(&s.jobs);
+                }
+                let _ = handle_in.emit("rg://jobs-changed", ());
             });
             Ok(())
         })
@@ -127,6 +222,7 @@ fn gui() {
             commands::cancel_shutdown,
             commands::log_path,
             commands::data_dir,
+            commands::job_thumb,
         ])
         .run(tauri::generate_context!())
         .expect("RenderGuard 启动失败");

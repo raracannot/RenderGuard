@@ -53,6 +53,29 @@ def split_template(path, sample_frame):
     return prefix, pad, suffix
 
 
+def collect_missing(limit=50):
+    """工程里找不到的贴图 / 库文件。只做存在性检查，不加载图片。"""
+    out = []
+
+    def add(p):
+        if p and not os.path.exists(p) and p not in out:
+            out.append(p)
+
+    try:
+        for img in bpy.data.images:
+            if img.source != "FILE" or not img.filepath:
+                continue
+            add(bpy.path.abspath(img.filepath))
+    except Exception:
+        pass
+    try:
+        for lib in bpy.data.libraries:
+            add(bpy.path.abspath(lib.filepath or ""))
+    except Exception:
+        pass
+    return out[:limit]
+
+
 def probe_scene(sc):
     r = sc.render
     fmt = r.image_settings.file_format
@@ -76,6 +99,7 @@ def probe_scene(sc):
         "isMovie": bool(is_movie),
         "useOverwrite": bool(r.use_overwrite),
         "usePlaceholder": bool(r.use_placeholder),
+        "missingFiles": collect_missing(),
         "pathPrefix": "",
         "pathPad": 4,
         "pathSuffix": "",

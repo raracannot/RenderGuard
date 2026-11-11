@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use crate::model::Job;
 
@@ -32,6 +33,12 @@ pub struct Settings {
     pub clean_blender: bool,
     /// 整个队列结束后自动关机
     pub shutdown_when_done: bool,
+    /// 任务完成时提醒（本地横幅 + 窗口置前，不联网）
+    pub notify_done: bool,
+    /// 任务失败时提醒
+    pub notify_fail: bool,
+    /// 同时最多跑几个任务
+    pub max_concurrent: u32,
     /// 界面皮肤编号（01/05/08/09/10/24/27/32/33/34/45/46/50/58/69）
     pub theme: String,
 }
@@ -49,6 +56,9 @@ impl Default for Settings {
             default_resume: true,
             clean_blender: false,
             shutdown_when_done: false,
+            notify_done: false,
+            notify_fail: false,
+            max_concurrent: 1,
             theme: "09".to_string(),
         }
     }
@@ -186,4 +196,66 @@ pub fn load_settings() -> Settings {
 
 pub fn save_settings(s: &Settings) -> std::io::Result<()> {
     write_json(&settings_path(), s)
+}
+
+// ---------------------------------------------------------------- 维护与任务投递
+
+/// 清理一天前的 Blender 会话临时目录（被强杀的进程不会自己删，久了会堆积）
+pub fn cleanup_stale_temp() {
+    let tmp = data_dir().join("tmp");
+    let Ok(rd) = fs::read_dir(&tmp) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.starts_with("blender_") {
+            continue;
+        }
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| now.duration_since(t).ok())
+            .map(|age| age > Duration::from_secs(24 * 3600))
+            .unwrap_or(false);
+        if old {
+            let _ = fs::remove_dir_all(e.path());
+        }
+    }
+}
+
+/// 外部投递入口：`renderguard.exe --enqueue job.json` 把文件丢进这里，
+/// 运行中的程序会自动收编，避免直接改 jobs.json 造成覆盖。
+pub fn inbox_dir() -> PathBuf {
+    let p = data_dir().join("inbox");
+    let _ = fs::create_dir_all(&p);
+    p
+}
+
+/// 取走 inbox 里的任务文件（取到即删除）
+pub fn drain_inbox() -> Vec<Job> {
+    let dir = inbox_dir();
+    let mut out = Vec::new();
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let is_json = p
+            .extension()
+            .and_then(|x| x.to_str())
+            .map(|x| x.eq_ignore_ascii_case("json"))
+            .unwrap_or(false);
+        if !is_json || !p.is_file() {
+            continue;
+        }
+        if let Ok(text) = fs::read_to_string(&p) {
+            if let Ok(j) = serde_json::from_str::<Job>(&text) {
+                out.push(j);
+            }
+        }
+        let _ = fs::remove_file(&p);
+    }
+    out
 }

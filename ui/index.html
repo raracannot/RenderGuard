@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="skins_extra.css" />
 </head>
 <body>
+<div id="noticeBox"></div>
 
 <div class="app">
 
@@ -253,6 +254,21 @@
             <span>次</span>
           </label>
         </div>
+
+        <div class="section-title">队列</div>
+        <div class="policy">
+          <label class="field-inline">
+            <span>优先级</span>
+            <input type="number" id="inpPriority" class="num sm" value="0" min="-9" max="9" />
+            <span>数字大的先跑</span>
+          </label>
+          <label class="field-inline">
+            <span>依赖任务</span>
+            <select id="inpDeps" multiple size="3" class="deps"></select>
+          </label>
+          <div class="field-hint">按住 Ctrl 多选；被依赖的任务没成功时，本任务不会启动</div>
+          <div class="field-hint warn" id="dlgMissing"></div>
+        </div>
       </div>
     </div>
 
@@ -323,6 +339,27 @@
               <input type="checkbox" id="setQueueAuto" />
               <span>一个任务完成后自动开始下一个</span>
             </label>
+            <div class="row-inline" style="margin-top:8px">
+              <span class="unit">同时最多跑</span>
+              <input type="number" id="setMaxConcurrent" class="num sm" min="1" max="8" value="1" />
+              <span class="unit">个任务</span>
+            </div>
+            <div class="field-hint">大于 1 时会同时启动多个 Blender，显存/内存不够时别开太高</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>提醒</label>
+          <div class="field-ctl">
+            <label class="chk">
+              <input type="checkbox" id="setNotifyDone" />
+              <span>任务完成时提醒<em>本机横幅 + 窗口置前，不联网</em></span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" id="setNotifyFail" />
+              <span>任务失败时提醒</span>
+            </label>
+            <div class="field-hint">默认关闭。开启后只在程序内提示，不会发邮件或上传任何数据</div>
           </div>
         </div>
 

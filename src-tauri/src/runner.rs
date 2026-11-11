@@ -288,6 +288,68 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
                 finalize(&app, &shared, &id, Instant::now(), Some(msg));
                 return;
             }
+            // 磁盘剩余空间：低于 2 GB 就明确告诉用户，免得渲到一半写满
+            if let Some(free) = winproc::free_space(&dir) {
+                let gb = free as f64 / (1024.0 * 1024.0 * 1024.0);
+                if gb < 2.0 {
+                    let msg = format!(
+                        "输出目录所在磁盘只剩 {:.1} GB，可能渲到一半写满：{}",
+                        gb,
+                        dir.display()
+                    );
+                    emit_log(
+                        &app,
+                        &id,
+                        vec![LogLine {
+                            level: "warn".into(),
+                            text: msg,
+                        }],
+                    );
+                }
+            }
+        }
+
+        // 依赖检查：前置任务没成功时不要白跑
+        if !j.depends_on.is_empty() {
+            let blocked = {
+                let s = match shared.lock() {
+                    Ok(s) => s,
+                    Err(_) => return,
+                };
+                match dep_check(&s.jobs, &j) {
+                    DepCheck::Blocked(reason) => Some(reason),
+                    _ => None,
+                }
+            };
+            if let Some(reason) = blocked {
+                emit_log(
+                    &app,
+                    &id,
+                    vec![LogLine {
+                        level: "error".into(),
+                        text: reason.clone(),
+                    }],
+                );
+                finalize(&app, &shared, &id, Instant::now(), Some(reason));
+                return;
+            }
+        }
+
+        // 探测到的缺失文件（贴图/库）只告警，不阻止渲染
+        if !j.missing_files.is_empty() {
+            let sample: Vec<String> = j.missing_files.iter().take(3).cloned().collect();
+            emit_log(
+                &app,
+                &id,
+                vec![LogLine {
+                    level: "warn".into(),
+                    text: format!(
+                        "工程里有 {} 个文件找不到（渲染结果可能缺贴图），例如：{}",
+                        j.missing_files.len(),
+                        sample.join("；")
+                    ),
+                }],
+            );
         }
     }
 
@@ -351,7 +413,9 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
         let overwrite = first_attempt && (!job.resume || !job.animation);
         first_attempt = false;
 
+        let seg_t0 = Instant::now();
         let outcome = run_segment(&app, &shared, &job, seg_start, seg_end, overwrite, &stop);
+        let seg_secs = seg_t0.elapsed().as_secs_f64();
         // Blender 自己上报的写入次数：0 表示这一轮一个文件都没写出来
         let written = read_written(&job.id);
 
@@ -451,6 +515,12 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
                     no_progress_rounds = 0;
                 }
                 last_done = done;
+
+                // 记录本段耗时，折算平均每帧与最慢帧
+                if written > 0 {
+                    let n = ((seg_end - seg_start) / step.max(1) + 1) as i64;
+                    record_segment_stats(&shared, &id, seg_end, seg_secs, n);
+                }
 
                 // 静帧只有一帧：确实写出来了就收工，别让它反复重渲
                 if !fresh.animation && written > 0 && bad.is_empty() {
@@ -665,7 +735,6 @@ fn begin(app: &Option<AppHandle>, shared: &Shared, id: &str) -> Option<Arc<Atomi
 }
 
 fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant, fatal: Option<String>) {
-    let mut next = None;
     // 失败时把日志尾部带回界面上，否则用户只看到"已停止"三个字
     let tail = log_tail(id, 5, started);
     {
@@ -710,26 +779,219 @@ fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant
                 }
             }
         }
-        let snap = s.jobs.iter().find(|j| j.id == id).cloned();
-        // 队列自动流转
-        if s.settings.queue_auto {
-            if let Some(n) = s
-                .jobs
-                .iter()
-                .find(|j| j.status == JobStatus::Queued && !s.running.contains_key(&j.id))
-            {
-                next = Some(n.id.clone());
+        // 失败归类，给界面一个能直接显示的结论
+        if let Some(j) = s.jobs.iter_mut().find(|j| j.id == id) {
+            if matches!(j.status, JobStatus::Failed | JobStatus::Partial | JobStatus::Stopped) {
+                j.error_kind = classify_failure(&j.progress.message, &tail);
+            } else {
+                j.error_kind.clear();
             }
         }
+        let snap = s.jobs.iter().find(|j| j.id == id).cloned();
+        let (notify_done, notify_fail) = (s.settings.notify_done, s.settings.notify_fail);
         let _ = store::save_jobs(&s.jobs);
         drop(s);
+
         if let Some(j) = snap {
+            let want = match j.status {
+                JobStatus::Done => notify_done,
+                JobStatus::Failed | JobStatus::Partial => notify_fail,
+                _ => false,
+            };
+            if want {
+                let ok = j.status == JobStatus::Done;
+                let title = if ok { "渲染完成" } else { "渲染没有全部成功" };
+                let body = format!(
+                    "{} · 完成 {}/{} 帧 · 用时 {}",
+                    j.name,
+                    j.progress.done,
+                    j.progress.total,
+                    fmt_duration(j.elapsed)
+                );
+                emit_notice(app, if ok { "ok" } else { "error" }, title, &body, true);
+            }
             emit_job(app, &j);
         }
     }
-    if let Some(nid) = next {
-        start(app.clone(), shared.clone(), nid);
+    schedule_next(app, shared);
+}
+
+/// 依赖检查结果
+enum DepCheck {
+    Ready,
+    Waiting,
+    Blocked(String),
+}
+
+fn dep_check(jobs: &[Job], job: &Job) -> DepCheck {
+    let mut waiting = false;
+    for d in &job.depends_on {
+        let Some(dep) = jobs.iter().find(|j| &j.id == d) else {
+            continue; // 依赖的任务已被删除，忽略
+        };
+        match dep.status {
+            JobStatus::Done => {}
+            JobStatus::Failed | JobStatus::Partial | JobStatus::Stopped | JobStatus::Blocked => {
+                return DepCheck::Blocked(format!("依赖的任务「{}」没有成功", dep.name));
+            }
+            _ => waiting = true,
+        }
     }
+    if waiting {
+        DepCheck::Waiting
+    } else {
+        DepCheck::Ready
+    }
+}
+
+/// 按优先级/依赖挑任务，填满并发槽位
+pub fn schedule_next(app: &Option<AppHandle>, shared: &Shared) {
+    let mut to_start: Vec<String> = Vec::new();
+    let mut finished_summary: Option<String> = None;
+    {
+        let Ok(mut s) = shared.lock() else {
+            return;
+        };
+        if !s.settings.queue_auto {
+            return;
+        }
+        let limit = s.settings.max_concurrent.max(1) as usize;
+
+        // 1) 依赖不满足且已经无望的任务，标记为阻塞
+        let snapshot_jobs = s.jobs.clone();
+        for j in s.jobs.iter_mut() {
+            if j.status == JobStatus::Queued {
+                if let DepCheck::Blocked(reason) = dep_check(&snapshot_jobs, j) {
+                    j.status = JobStatus::Blocked;
+                    j.progress.message = reason;
+                }
+            }
+        }
+
+        // 2) 按优先级挑，填满槽位
+        while s.running.len() + to_start.len() < limit {
+            let mut cands: Vec<&Job> = s
+                .jobs
+                .iter()
+                .filter(|j| {
+                    j.status == JobStatus::Queued
+                        && !s.running.contains_key(&j.id)
+                        && !to_start.contains(&j.id)
+                })
+                .collect();
+            cands.retain(|j| matches!(dep_check(&s.jobs, j), DepCheck::Ready));
+            cands.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.created.cmp(&b.created)));
+            match cands.first() {
+                Some(j) => to_start.push(j.id.clone()),
+                None => break,
+            }
+        }
+
+        // 3) 队列是否已经排空
+        let any_left = !s.running.is_empty()
+            || !to_start.is_empty()
+            || s.jobs
+                .iter()
+                .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Blocked));
+        if !any_left {
+            let done = s.jobs.iter().filter(|j| j.status == JobStatus::Done).count();
+            let failed = s
+                .jobs
+                .iter()
+                .filter(|j| matches!(j.status, JobStatus::Failed | JobStatus::Partial))
+                .count();
+            let secs: f64 = s.jobs.iter().map(|j| j.elapsed).sum();
+            finished_summary = Some(format!(
+                "队列结束：成功 {} 个，失败 {} 个，共耗时 {}",
+                done,
+                failed,
+                fmt_duration(secs)
+            ));
+        }
+        let _ = store::save_jobs(&s.jobs);
+    }
+
+    for id in to_start {
+        start(app.clone(), shared.clone(), id);
+    }
+    if let Some(summary) = finished_summary {
+        emit_notice(app, "ok", "队列已全部结束", &summary, false);
+    }
+}
+
+fn fmt_duration(secs: f64) -> String {
+    let s = secs.max(0.0) as u64;
+    if s >= 3600 {
+        format!("{} 小时 {} 分", s / 3600, (s % 3600) / 60)
+    } else if s >= 60 {
+        format!("{} 分 {} 秒", s / 60, s % 60)
+    } else {
+        format!("{} 秒", s)
+    }
+}
+
+/// 本地提醒：只发事件给前端做横幅/发声，不联网
+fn emit_notice(app: &Option<AppHandle>, level: &str, title: &str, body: &str, focus: bool) {
+    let Some(a) = app else {
+        return;
+    };
+    let payload = serde_json::json!({
+        "level": level,
+        "title": title,
+        "body": body,
+        "focus": focus,
+    });
+    let _ = a.emit("rg://notice", payload);
+}
+
+/// 把一段渲染的耗时折算成"平均每帧 / 最慢帧"
+fn record_segment_stats(shared: &Shared, id: &str, last_frame: i32, secs: f64, frames: i64) {
+    if frames <= 0 || secs <= 0.0 {
+        return;
+    }
+    let per = secs / frames as f64;
+    if let Ok(mut s) = shared.lock() {
+        if let Some(j) = s.jobs.iter_mut().find(|j| j.id == id) {
+            let done = j.progress.done.max(1) as f64;
+            let total = j.elapsed.max(secs);
+            j.avg_frame_sec = total / done;
+            if per > j.slowest_sec {
+                j.slowest_sec = per;
+                j.slowest_frame = last_frame;
+            }
+        }
+        let _ = store::save_jobs(&s.jobs);
+    }
+}
+
+/// 失败归类，给界面一个能直接显示的结论
+fn classify_failure(msg: &str, tail: &[String]) -> String {
+    let mut all = String::from(msg);
+    for t in tail {
+        all.push(' ');
+        all.push_str(t);
+    }
+    let l = all.to_ascii_lowercase();
+    let kind = if l.contains("无法创建输出目录") || l.contains("输出目录不可写") {
+        "output"
+    } else if l.contains("视频格式") {
+        "format"
+    } else if l.contains("permission") || l.contains("拒绝访问") || l.contains("不可写") {
+        "permission"
+    } else if l.contains("磁盘") || l.contains("空间不足") || l.contains("no space") {
+        "disk"
+    } else if l.contains("无法读取文件") || l.contains("no such file") || l.contains("找不到") {
+        "missing-scene"
+    } else if l.contains("engine") || l.contains("渲染引擎") {
+        "engine"
+    } else if l.contains("卡死") || l.contains("超时") || l.contains("timeout") {
+        "timeout"
+    } else if l.contains("崩溃") || l.contains("exit code") {
+        "crash"
+    } else {
+        "unknown"
+    };
+    kind.to_string()
 }
 
 fn snapshot(shared: &Shared, id: &str) -> Option<Job> {

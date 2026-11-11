@@ -11,6 +11,8 @@ pub enum JobStatus {
     Partial,
     Failed,
     Stopped,
+    /// 依赖的任务没成功，本任务不会开始
+    Blocked,
 }
 
 impl Default for JobStatus {
@@ -95,6 +97,27 @@ pub struct Job {
     #[serde(default)]
     pub failed_frames: Vec<i32>,
 
+    /// 队列调度：数字越大越先跑；同优先级按创建时间
+    #[serde(default)]
+    pub priority: i32,
+    /// 依赖的任务 id：全部完成后本任务才会开始
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    /// 探测时发现的缺失贴图 / 丢失的库文件
+    #[serde(default)]
+    pub missing_files: Vec<String>,
+    /// 失败归类：permission / disk / missing-scene / engine / crash / timeout / unknown
+    #[serde(default)]
+    pub error_kind: String,
+    /// 平均每帧耗时（秒）
+    #[serde(default)]
+    pub avg_frame_sec: f64,
+    /// 最慢的一帧与其耗时（秒）
+    #[serde(default)]
+    pub slowest_frame: i32,
+    #[serde(default)]
+    pub slowest_sec: f64,
+
     pub created: u64,
     pub elapsed: f64,
 }
@@ -129,6 +152,13 @@ impl Default for Job {
             cycles_devices: Vec::new(),
             attempts: BTreeMap::new(),
             failed_frames: Vec::new(),
+            priority: 0,
+            depends_on: Vec::new(),
+            missing_files: Vec::new(),
+            error_kind: String::new(),
+            avg_frame_sec: 0.0,
+            slowest_frame: 0,
+            slowest_sec: 0.0,
             created: 0,
             elapsed: 0.0,
         }
@@ -263,6 +293,9 @@ pub struct SceneInfo {
     pub path_pad: u32,
     pub path_suffix: String,
     pub template_ok: bool,
+    /// 工程里找不到的贴图 / 库文件
+    #[serde(default)]
+    pub missing_files: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

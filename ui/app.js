@@ -18,7 +18,7 @@ const FORMATS = [
 const MOVIE = new Set(["FFMPEG", "AVI_JPEG", "AVI_RAW"]);
 const STATUS = {
   queued: "排队", running: "渲染中", done: "完成",
-  partial: "部分完成", failed: "失败", stopped: "已停止",
+  partial: "部分完成", failed: "失败", stopped: "已停止", blocked: "依赖未满足",
 };
 
 const S = {
@@ -137,8 +137,10 @@ function rowHTML(job) {
   const cur = job.status === "running" ? (job.progress.current || "—") : "—";
   const retry = job.progress.restarts ? job.progress.restarts : "";
   const sub = job.templateOk ? "" : `<small>模板不可用</small>`;
+  const err = job.errorKind ? `<small class="errkind">${esc(ERROR_KIND[job.errorKind] || "渲染失败")}</small>` : "";
+  const dep = (job.dependsOn || []).length ? `<small>等待 ${job.dependsOn.length} 个前置</small>` : "";
   return `
-    <div class="cell name" title="${esc(job.name)}">${esc(job.name)}${sub}</div>
+    <div class="cell name" title="${esc(job.name)}">${esc(job.name)}${sub}${err}${dep}</div>
     <div class="cell" title="${esc(job.scene)}">${esc(job.scene)}</div>
     <div class="cell mono">${range}</div>
     <div class="cell">${esc((job.engine || "").replace("CYCLES", "Cycles").replace("BLENDER_EEVEE_NEXT", "EEVEE").replace("BLENDER_EEVEE", "EEVEE"))}</div>
@@ -147,6 +149,18 @@ function rowHTML(job) {
     <div class="cell mono">${cur}</div>
     <div class="cell mono">${retry}</div>`;
 }
+
+const ERROR_KIND = {
+  output: "输出目录不可用",
+  format: "格式不支持",
+  permission: "权限被拒",
+  disk: "磁盘空间不足",
+  "missing-scene": "工程/贴图找不到",
+  engine: "渲染引擎不可用",
+  timeout: "渲染超时/卡死",
+  crash: "Blender 崩溃",
+  unknown: "渲染失败",
+};
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -221,14 +235,27 @@ function renderDetail() {
   const p = job.progress || {};
   const outDir = dirOf(job.pathPrefix) || "（未探测）";
   const failed = (job.failedFrames || []).map((f) => `<span>${f}</span>`).join("");
+  const avg = job.avgFrameSec ? `${job.avgFrameSec.toFixed(1)} 秒/帧` : "—";
+  const slow = job.slowestSec
+    ? `第 ${job.slowestFrame} 帧 · ${job.slowestSec.toFixed(1)} 秒`
+    : "—";
+  const deps = (job.dependsOn || []).length
+    ? job.dependsOn.map((d) => S.jobs.get(d)?.name || d).join("、")
+    : "无";
   box.innerHTML = `
     <h3>${esc(job.name)}</h3>
+    <div class="thumb" id="thumbBox"><span class="dim small">缩略图加载中…</span></div>
     <dl class="kv">
       <dt>状态</dt><dd><span class="chip ${job.status}">${STATUS[job.status] || job.status}</span></dd>
+      ${job.errorKind ? `<dt>失败原因</dt><dd class="errkind">${esc(ERROR_KIND[job.errorKind] || "渲染失败")}</dd>` : ""}
       <dt>场景</dt><dd>${esc(job.scene)}</dd>
       <dt>帧范围</dt><dd>${job.animation ? `${job.frameStart} – ${job.frameEnd}（步 ${job.frameStep}）` : `静帧 ${job.stillFrame}`}</dd>
       <dt>进度</dt><dd>${p.done || 0} / ${p.total || 0} 帧${p.failed ? `，失败 ${p.failed}` : ""}</dd>
       <dt>用时</dt><dd>${fmtSec(job.elapsed)}</dd>
+      <dt>平均</dt><dd>${avg}</dd>
+      <dt>最慢帧</dt><dd>${slow}</dd>
+      <dt>优先级</dt><dd>${job.priority || 0}</dd>
+      <dt>依赖</dt><dd>${esc(deps)}</dd>
       <dt>重启</dt><dd>${p.restarts || 0} 次</dd>
       <dt>输出</dt><dd>${esc(outDir)}</dd>
       <dt>工程</dt><dd>${esc(job.blend)}</dd>
@@ -236,6 +263,7 @@ function renderDetail() {
       <dt>提示</dt><dd>${esc(p.message || "—")}</dd>
     </dl>
     ${failed ? `<div class="fails"><div class="dim small">失败帧（已隔离）</div><div class="list">${failed}</div></div>` : ""}
+    ${(job.missingFiles || []).length ? `<div class="warn-text" style="margin-top:10px">工程里有 ${job.missingFiles.length} 个文件找不到：<br>${esc(job.missingFiles.slice(0, 5).join("\n"))}</div>` : ""}
     <div class="actions">
       <button class="btn small" data-act="open">输出目录</button>
       <button class="btn small" data-act="log">日志</button>
@@ -267,10 +295,59 @@ function renderDetail() {
       if (act === "retry") invoke("retry_failed", { ids: [job.id] }).then(refresh);
     };
   });
+
+  // 缩略图（只在详情面板打开时取一张，避免一次拉太多）
+  const tb = $("thumbBox");
+  if (tb) {
+    invoke("job_thumb", { id: job.id })
+      .then((data) => {
+        tb.innerHTML = data
+          ? `<img alt="预览" src="${data}">`
+          : `<span class="dim small">还没有可预览的成品</span>`;
+      })
+      .catch(() => {
+        tb.innerHTML = `<span class="dim small">缩略图不可用</span>`;
+      });
+  }
 }
 
-function fmtSec(s) {
-  s = Math.floor(s || 0);
+/* ------------------------------------------------------------ 本地提醒 */
+
+function beep(freq, times) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    for (let i = 0; i < times; i += 1) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.value = 0.05;
+      o.connect(g).connect(ctx.destination);
+      const t0 = ctx.currentTime + i * 0.22;
+      o.start(t0);
+      o.stop(t0 + 0.14);
+    }
+    setTimeout(() => ctx.close().catch(() => {}), 1200);
+  } catch (_) {
+    /* 没有音频设备就静默 */
+  }
+}
+
+function showNotice(n) {
+  const box = $("noticeBox");
+  if (!box) return;
+  const el = document.createElement("div");
+  el.className = `notice ${n.level === "error" ? "err" : "ok"}`;
+  el.innerHTML = `<b>${esc(n.title || "")}</b><span>${esc(n.body || "")}</span><button class="ghost small" title="关闭">✕</button>`;
+  el.querySelector("button").onclick = () => el.remove();
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 15000);
+  beep(n.level === "error" ? 520 : 720, n.level === "error" ? 2 : 1);
+}
+
+function fmtSec(s) {  s = Math.floor(s || 0);
   if (s < 60) return s + " 秒";
   const m = Math.floor(s / 60);
   if (m < 60) return m + " 分 " + (s % 60) + " 秒";
@@ -409,6 +486,9 @@ function openJobDialog(existing) {
   $("chkAutoRestart").checked = existing ? existing.autoRestart : true;
   $("chkVerify").checked = existing ? existing.verify : true;
   $("inpRetries").value = existing ? existing.maxRetries : (S.settings?.defaultMaxRetries ?? 3);
+  $("inpPriority").value = existing ? (existing.priority ?? 0) : 0;
+  fillDepOptions(existing);
+  $("dlgMissing").textContent = "";
 
   clearProbeFields();
   $("dlgOverlay").classList.remove("hidden");
@@ -422,8 +502,30 @@ function openJobDialog(existing) {
   }
 }
 
-function clearProbeFields() {
-  $("inpCamera").innerHTML = "";
+function fillDepOptions(existing) {
+  const sel = $("inpDeps");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const cur = new Set(existing?.dependsOn || []);
+  let n = 0;
+  for (const j of S.jobs || []) {
+    if (existing && j.id === existing.id) continue;
+    const o = document.createElement("option");
+    o.value = j.id;
+    o.textContent = `${j.name}（${STATUS[j.status] || j.status}）`;
+    o.selected = cur.has(j.id);
+    sel.appendChild(o);
+    n += 1;
+  }
+  if (!n) {
+    const o = document.createElement("option");
+    o.disabled = true;
+    o.textContent = "队列里还没有其他任务";
+    sel.appendChild(o);
+  }
+}
+
+function clearProbeFields() {  $("inpCamera").innerHTML = "";
   $("inpResW").value = "";
   $("inpResH").value = "";
   $("inpResPct").value = "100";
@@ -533,6 +635,13 @@ function renderScenes() {
 
 function selectScene(sc, existing) {
   S.scene = sc;
+  const miss = $("dlgMissing");
+  if (miss) {
+    const n = (sc.missingFiles || []).length;
+    miss.textContent = n
+      ? `⚠ 工程里有 ${n} 个文件找不到（贴图/库），渲染结果可能缺东西。例如：${(sc.missingFiles || []).slice(0, 2).join("；")}`
+      : "";
+  }
   document.querySelectorAll(".scene-item").forEach((el) => {
     const on = el._scene === sc;
     el.classList.toggle("on", on);
@@ -707,6 +816,11 @@ async function saveJob() {
     autoRestart: $("chkAutoRestart").checked,
     maxRetries: Math.max(0, parseInt($("inpRetries").value) || 0),
     verify: $("chkVerify").checked,
+    priority: parseInt($("inpPriority").value) || 0,
+    dependsOn: Array.from($("inpDeps").selectedOptions || [])
+      .map((o) => o.value)
+      .filter(Boolean),
+    missingFiles: S.scene.missingFiles || [],
     status: "queued",
     progress: { total: 0, done: 0, failed: 0, current: 0, percent: 0, restarts: 0, message: "" },
     attempts: {},
@@ -809,6 +923,9 @@ function openSettings() {
   $("setQueueAuto").checked = s.queueAuto ?? true;
   $("setClean").checked = s.cleanBlender ?? false;
   $("setShutdown").checked = s.shutdownWhenDone ?? false;
+  $("setMaxConcurrent").value = s.maxConcurrent ?? 1;
+  $("setNotifyDone").checked = s.notifyDone ?? false;
+  $("setNotifyFail").checked = s.notifyFail ?? false;
   $("setRetries").value = s.defaultMaxRetries ?? 3;
   $("setOverlay").classList.remove("hidden");
 }
@@ -820,6 +937,9 @@ async function saveSettings() {
   s.queueAuto = $("setQueueAuto").checked;
   s.cleanBlender = $("setClean").checked;
   s.shutdownWhenDone = $("setShutdown").checked;
+  s.maxConcurrent = Math.min(8, Math.max(1, parseInt($("setMaxConcurrent").value) || 1));
+  s.notifyDone = $("setNotifyDone").checked;
+  s.notifyFail = $("setNotifyFail").checked;
   s.defaultMaxRetries = Math.max(0, parseInt($("setRetries").value) || 0);
   s.theme = S.skin || "09";
   try {
@@ -1348,6 +1468,8 @@ async function boot() {
     for (const l of e.payload.lines) log(l.text, l.level, label);
   });
   await listen("rg://jobs-changed", () => refresh());
+
+  await listen("rg://notice", (e) => showNotice(e.payload || {}));
 
   await listen("tauri://drag-drop", async (e) => {
     const paths = (e.payload && e.payload.paths) || [];
