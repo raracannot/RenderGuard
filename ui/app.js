@@ -138,9 +138,10 @@ function rowHTML(job) {
   const retry = job.progress.restarts ? job.progress.restarts : "";
   const sub = job.templateOk ? "" : `<small>模板不可用</small>`;
   const err = job.errorKind ? `<small class="errkind">${esc(ERROR_KIND[job.errorKind] || "渲染失败")}</small>` : "";
-  const dep = (job.dependsOn || []).length ? `<small>等待 ${job.dependsOn.length} 个前置</small>` : "";
   return `
-    <div class="cell name" title="${esc(job.name)}">${esc(job.name)}${sub}${err}${dep}</div>
+    <div class="cell grip" title="拖动调整顺序">⠿</div>
+    <div class="cell onbox"><input type="checkbox" data-on="${esc(job.id)}" ${job.enabled === false ? "" : "checked"} title="勾选才会渲染" /></div>
+    <div class="cell name" title="${esc(job.name)}">${esc(job.name)}${sub}${err}</div>
     <div class="cell" title="${esc(job.scene)}">${esc(job.scene)}</div>
     <div class="cell mono">${range}</div>
     <div class="cell">${esc((job.engine || "").replace("CYCLES", "Cycles").replace("BLENDER_EEVEE_NEXT", "EEVEE").replace("BLENDER_EEVEE", "EEVEE"))}</div>
@@ -174,13 +175,20 @@ function renderQueue() {
     const job = S.jobs.get(id);
     if (!job) continue;
     const row = document.createElement("div");
-    row.className = "row" + (S.sel.has(id) ? " sel" : "");
+    row.className = "row" + (S.sel.has(id) ? " sel" : "") + (job.enabled === false ? " off" : "");
     row.dataset.id = id;
     row.innerHTML = rowHTML(job);
     body.appendChild(row);
   }
   $("queueEmpty").classList.toggle("hidden", S.order.length > 0);
   $("queueCount").textContent = String(S.order.length);
+  const all = $("chkAllOn");
+  if (all) {
+    const live = S.order.filter((id) => S.jobs.get(id));
+    const on = live.filter((id) => S.jobs.get(id).enabled !== false);
+    all.checked = live.length > 0 && on.length === live.length;
+    all.indeterminate = on.length > 0 && on.length < live.length;
+  }
   updateLive();
 }
 
@@ -192,6 +200,7 @@ function updateRow(job) {
   }
   row.innerHTML = rowHTML(job);
   row.classList.toggle("sel", S.sel.has(job.id));
+  row.classList.toggle("off", job.enabled === false);
   updateLive();
 }
 
@@ -239,9 +248,6 @@ function renderDetail() {
   const slow = job.slowestSec
     ? `第 ${job.slowestFrame} 帧 · ${job.slowestSec.toFixed(1)} 秒`
     : "—";
-  const deps = (job.dependsOn || []).length
-    ? job.dependsOn.map((d) => S.jobs.get(d)?.name || d).join("、")
-    : "无";
   box.innerHTML = `
     <h3>${esc(job.name)}</h3>
     <div class="thumb" id="thumbBox"><span class="dim small">缩略图加载中…</span></div>
@@ -254,8 +260,6 @@ function renderDetail() {
       <dt>用时</dt><dd>${fmtSec(job.elapsed)}</dd>
       <dt>平均</dt><dd>${avg}</dd>
       <dt>最慢帧</dt><dd>${slow}</dd>
-      <dt>优先级</dt><dd>${job.priority || 0}</dd>
-      <dt>依赖</dt><dd>${esc(deps)}</dd>
       <dt>重启</dt><dd>${p.restarts || 0} 次</dd>
       <dt>输出</dt><dd>${esc(outDir)}</dd>
       <dt>工程</dt><dd>${esc(job.blend)}</dd>
@@ -477,7 +481,7 @@ function openJobDialog(existing) {
   if (sel.selectedIndex < 0) sel.selectedIndex = 0;
   $("inpBlend").value = existing?.blend || "";
 
-  ["chkCamera", "chkRes", "chkFps", "chkRange", "chkType", "chkFormat", "chkOut"].forEach((k) => {
+  ["chkCamera", "chkRes", "chkFps", "chkRange", "chkFormat", "chkOut"].forEach((k) => {
     $(k).checked = false;
   });
   syncOverrideInputs();
@@ -486,9 +490,6 @@ function openJobDialog(existing) {
   $("chkAutoRestart").checked = existing ? existing.autoRestart : true;
   $("chkVerify").checked = existing ? existing.verify : true;
   $("inpRetries").value = existing ? existing.maxRetries : (S.settings?.defaultMaxRetries ?? 3);
-  $("inpPriority").value = existing ? (existing.priority ?? 0) : 0;
-  fillDepOptions(existing);
-  $("dlgMissing").textContent = "";
 
   clearProbeFields();
   $("dlgOverlay").classList.remove("hidden");
@@ -502,30 +503,8 @@ function openJobDialog(existing) {
   }
 }
 
-function fillDepOptions(existing) {
-  const sel = $("inpDeps");
-  if (!sel) return;
-  sel.innerHTML = "";
-  const cur = new Set(existing?.dependsOn || []);
-  let n = 0;
-  for (const j of S.jobs || []) {
-    if (existing && j.id === existing.id) continue;
-    const o = document.createElement("option");
-    o.value = j.id;
-    o.textContent = `${j.name}（${STATUS[j.status] || j.status}）`;
-    o.selected = cur.has(j.id);
-    sel.appendChild(o);
-    n += 1;
-  }
-  if (!n) {
-    const o = document.createElement("option");
-    o.disabled = true;
-    o.textContent = "队列里还没有其他任务";
-    sel.appendChild(o);
-  }
-}
-
-function clearProbeFields() {  $("inpCamera").innerHTML = "";
+function clearProbeFields() {
+  $("inpCamera").innerHTML = "";
   $("inpResW").value = "";
   $("inpResH").value = "";
   $("inpResPct").value = "100";
@@ -533,7 +512,7 @@ function clearProbeFields() {  $("inpCamera").innerHTML = "";
   $("inpStart").value = "1";
   $("inpEnd").value = "1";
   $("inpStep").value = "1";
-  $("inpType").value = "anim";
+  $("inpType").value = "still";
   $("inpStill").value = "1";
   $("inpOutDir").value = "";
   $("inpPrefix").value = "frame_";
@@ -547,7 +526,6 @@ function syncOverrideInputs() {
     chkRes: ["inpResW", "inpResH", "inpResPct"],
     chkFps: ["inpFps"],
     chkRange: ["inpStart", "inpEnd", "inpStep"],
-    chkType: ["inpType"],
     chkFormat: ["inpFormat"],
     chkOut: ["inpOutDir", "inpPrefix", "btnBrowseOut"],
   };
@@ -559,7 +537,8 @@ function syncOverrideInputs() {
       el.disabled = !on;
     }
   }
-  $("inpStill").disabled = !$("chkType").checked || $("inpType").value !== "still";
+  // 渲染类型不是“覆盖项”，始终可选；只有静帧才需要帧号
+  $("inpStill").disabled = $("inpType").value !== "still";
   updatePreview();
 }
 
@@ -635,12 +614,9 @@ function renderScenes() {
 
 function selectScene(sc, existing) {
   S.scene = sc;
-  const miss = $("dlgMissing");
-  if (miss) {
-    const n = (sc.missingFiles || []).length;
-    miss.textContent = n
-      ? `⚠ 工程里有 ${n} 个文件找不到（贴图/库），渲染结果可能缺东西。例如：${(sc.missingFiles || []).slice(0, 2).join("；")}`
-      : "";
+  const missing = (sc.missingFiles || []).length;
+  if (missing) {
+    toast(`工程里有 ${missing} 个文件找不到（贴图/库），渲染结果可能缺东西`, "err");
   }
   document.querySelectorAll(".scene-item").forEach((el) => {
     const on = el._scene === sc;
@@ -666,8 +642,9 @@ function selectScene(sc, existing) {
   $("inpStart").value = sc.frameStart;
   $("inpEnd").value = sc.frameEnd;
   $("inpStep").value = sc.frameStep;
-  $("inpStill").value = sc.frameStart;
-  $("inpType").value = "anim";
+  // 默认按“单帧静帧”来，帧号取工程里的当前活动帧
+  $("inpStill").value = sc.frameCurrent != null ? sc.frameCurrent : sc.frameStart;
+  $("inpType").value = "still";
 
   const fmt = $("inpFormat");
   if ([...fmt.options].some((o) => o.value === sc.format)) fmt.value = sc.format;
@@ -705,9 +682,10 @@ function restoreOverrides(job) {
     if (ov.prefix) $("inpPrefix").value = ov.prefix;
   }
   if (!job.animation) {
-    $("chkType").checked = true;
     $("inpType").value = "still";
     $("inpStill").value = job.stillFrame;
+  } else {
+    $("inpType").value = "anim";
   }
 }
 
@@ -786,8 +764,10 @@ async function saveJob() {
 
   const ov = collectOverrides();
   const t = resolveTemplate(S.scene, ov);
-  const anim = $("inpType").value !== "still" || !$("chkType").checked;
-  const still = parseInt($("inpStill").value) || S.scene.frameStart;
+  const anim = $("inpType").value === "anim";
+  const still =
+    parseInt($("inpStill").value, 10) ||
+    (S.scene.frameCurrent != null ? S.scene.frameCurrent : S.scene.frameStart);
 
   const start = ov.frameStart != null ? ov.frameStart : S.scene.frameStart;
   const end = ov.frameEnd != null ? ov.frameEnd : S.scene.frameEnd;
@@ -816,10 +796,7 @@ async function saveJob() {
     autoRestart: $("chkAutoRestart").checked,
     maxRetries: Math.max(0, parseInt($("inpRetries").value) || 0),
     verify: $("chkVerify").checked,
-    priority: parseInt($("inpPriority").value) || 0,
-    dependsOn: Array.from($("inpDeps").selectedOptions || [])
-      .map((o) => o.value)
-      .filter(Boolean),
+    enabled: true,
     missingFiles: S.scene.missingFiles || [],
     status: "queued",
     progress: { total: 0, done: 0, failed: 0, current: 0, percent: 0, restarts: 0, message: "" },
@@ -1216,14 +1193,97 @@ function bind() {
     invoke("set_settings", { settings: S.settings }).catch(() => {});
     await importDropped(dirs);
   };
-  $("btnStart").onclick = async () => {
-    const ids = selOrAll();
-    if (!ids.length) return toast("队列是空的", "err");
-    await invoke("start_jobs", { ids });
+  $("btnStartQueue").onclick = async () => {
+    const n = await invoke("start_queue");
     await refresh();
+    toast(n > 0 ? `已加入调度：${n} 个任务` : "没有需要排队的任务");
   };
-  $("btnStop").onclick = async () => {
-    const ids = selOrAll();
+  $("btnStartSingle").onclick = async () => {
+    const ids = [...S.sel];
+    if (!ids.length) return toast("先在队列里选中一个任务", "err");
+    if (ids.length > 1) return toast("「仅渲染单项」一次只能选一个任务", "err");
+    const n = await invoke("start_single", { ids });
+    await refresh();
+    toast(n > 0 ? "已加入调度（排在当前任务之后）" : "这个任务已经在跑或已排队");
+  };
+  // 表头全选：一次性开关所有任务的“是否参与调度”
+  $("chkAllOn").addEventListener("change", async (e) => {
+    const on = e.target.checked;
+    try {
+      await invoke("set_all_enabled", { enabled: on });
+      for (const j of S.jobs.values()) j.enabled = on;
+      renderQueue();
+      toast(on ? "已全部启用" : "已全部屏蔽（不会渲染）");
+    } catch (err) {
+      toast("保存失败：" + String(err).slice(0, 120), "err");
+      await refresh();
+    }
+  });
+
+  // 队列：勾选启用 + 拖拽排序（事件委托，重绘后依然有效）
+  const qbody = $("queueBody");
+  qbody.addEventListener("change", async (e) => {
+    const cb = e.target.closest && e.target.closest("input[data-on]");
+    if (!cb) return;
+    const id = cb.dataset.on;
+    try {
+      await invoke("set_enabled", { id, enabled: cb.checked });
+      const job = S.jobs.get(id);
+      if (job) job.enabled = cb.checked;
+      const row = document.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
+      if (row) row.classList.toggle("off", !cb.checked);
+      toast(cb.checked ? "已启用" : "已屏蔽，不会渲染");
+    } catch (err) {
+      toast("保存失败：" + String(err).slice(0, 120), "err");
+    }
+  });
+
+  qbody.addEventListener("pointerdown", (e) => {
+    const grip = e.target.closest && e.target.closest(".grip");
+    if (!grip) return;
+    const row = grip.closest(".row");
+    if (!row) return;
+    e.preventDefault();
+    row.classList.add("dragging");
+    const clear = () =>
+      document
+        .querySelectorAll(".row.drop-before,.row.drop-after")
+        .forEach((r) => r.classList.remove("drop-before", "drop-after"));
+    const move = (ev) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const over = el && el.closest && el.closest(".row");
+      clear();
+      if (!over || over === row) return;
+      const r = over.getBoundingClientRect();
+      over.classList.add(ev.clientY > r.top + r.height / 2 ? "drop-after" : "drop-before");
+    };
+    const up = async () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      row.classList.remove("dragging");
+      const target = document.querySelector(".row.drop-before,.row.drop-after");
+      const after = target && target.classList.contains("drop-after");
+      clear();
+      if (!target) return;
+      const ids = S.order.filter((x) => x !== row.dataset.id);
+      let idx = ids.indexOf(target.dataset.id);
+      if (idx < 0) return;
+      if (after) idx += 1;
+      ids.splice(idx, 0, row.dataset.id);
+      S.order = ids;
+      renderQueue();
+      try {
+        await invoke("reorder_jobs", { ids });
+      } catch (err) {
+        toast("顺序保存失败：" + String(err).slice(0, 120), "err");
+        await refresh();
+      }
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+
+  $("btnStop").onclick = async () => {    const ids = selOrAll();
     if (!ids.length) return;
     await invoke("stop_jobs", { ids });
   };
@@ -1434,7 +1494,7 @@ function bind() {
     updatePreview();
   };
 
-  ["chkCamera", "chkRes", "chkFps", "chkRange", "chkType", "chkFormat", "chkOut"].forEach((k) => {
+  ["chkCamera", "chkRes", "chkFps", "chkRange", "chkFormat", "chkOut"].forEach((k) => {
     $(k).onchange = syncOverrideInputs;
   });
   ["inpResW", "inpResH", "inpResPct", "inpFps", "inpStart", "inpEnd", "inpStep",
@@ -1442,7 +1502,7 @@ function bind() {
     const el = $(k);
     if (el) el.addEventListener("input", updatePreview);
     if (el) el.addEventListener("change", () => {
-      $("inpStill").disabled = !$("chkType").checked || $("inpType").value !== "still";
+      $("inpStill").disabled = $("inpType").value !== "still";
       updatePreview();
     });
   });

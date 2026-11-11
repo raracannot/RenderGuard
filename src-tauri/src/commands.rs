@@ -572,3 +572,97 @@ pub fn job_thumb(state: State<'_, Shared>, id: String) -> Result<Option<String>,
     }
     Ok(None)
 }
+
+// ---------------------------------------------------------------- 队列顺序与勾选
+
+/// 拖拽排序：按传入的 id 顺序重排任务列表（未列出的保持原相对顺序排到最后）
+#[tauri::command]
+pub fn reorder_jobs(state: State<'_, Shared>, ids: Vec<String>) -> Result<(), String> {
+    let mut s = state.lock().map_err(|e| e.to_string())?;
+    let mut ordered: Vec<Job> = Vec::with_capacity(s.jobs.len());
+    for id in &ids {
+        if let Some(pos) = s.jobs.iter().position(|j| &j.id == id) {
+            ordered.push(s.jobs.remove(pos));
+        }
+    }
+    ordered.append(&mut s.jobs);
+    s.jobs = ordered;
+    store::save_jobs(&s.jobs).map_err(|e| e.to_string())
+}
+
+/// 勾选/取消勾选：取消后任务留在队列里但不参与调度
+#[tauri::command]
+pub fn set_enabled(state: State<'_, Shared>, id: String, enabled: bool) -> Result<(), String> {
+    let mut s = state.lock().map_err(|e| e.to_string())?;
+    if let Some(j) = s.jobs.iter_mut().find(|j| j.id == id) {
+        j.enabled = enabled;
+    }
+    store::save_jobs(&s.jobs).map_err(|e| e.to_string())
+}
+
+/// 开始全队列：把所有已勾选、还没完成的任务投入调度（已在跑/已排队的跳过）
+#[tauri::command]
+pub fn start_queue(app: AppHandle, state: State<'_, Shared>) -> Result<usize, String> {
+    let mut queued = 0usize;
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        for j in s.jobs.iter_mut() {
+            if !j.enabled {
+                continue;
+            }
+            // 已完成的任务若被手动勾上，说明是想重渲，同样入队
+            if matches!(j.status, JobStatus::Running | JobStatus::Queued) {
+                continue;
+            }
+            j.status = JobStatus::Queued;
+            j.failed_frames.clear();
+            j.attempts.clear();
+            j.progress.message.clear();
+            queued += 1;
+        }
+        store::save_jobs(&s.jobs).map_err(|e| e.to_string())?;
+    }
+    pump(&app, state.inner());
+    Ok(queued)
+}
+
+/// 仅渲染单项：只把选中的任务投入调度（去重，已在跑/已排队的不重复入队）
+#[tauri::command]
+pub fn start_single(app: AppHandle, state: State<'_, Shared>, ids: Vec<String>) -> Result<usize, String> {
+    let mut queued = 0usize;
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        for id in &ids {
+            if let Some(j) = s.jobs.iter_mut().find(|j| &j.id == id) {
+                if matches!(j.status, JobStatus::Running | JobStatus::Queued) {
+                    continue; // 去重
+                }
+                // 手动指定要跑的任务，自动解开屏蔽
+                j.enabled = true;
+                j.status = JobStatus::Queued;
+                j.failed_frames.clear();
+                j.attempts.clear();
+                j.progress.message.clear();
+                queued += 1;
+            }
+        }
+        store::save_jobs(&s.jobs).map_err(|e| e.to_string())?;
+    }
+    pump(&app, state.inner());
+    Ok(queued)
+}
+
+/// 表头全选/全不选
+#[tauri::command]
+pub fn set_all_enabled(state: State<'_, Shared>, enabled: bool) -> Result<(), String> {
+    let mut s = state.lock().map_err(|e| e.to_string())?;
+    let running: Vec<String> = s.running.keys().cloned().collect();
+    for j in s.jobs.iter_mut() {
+        // 正在跑的保持原样，避免"全不选"把正在渲染的任务标成屏蔽
+        if running.contains(&j.id) {
+            continue;
+        }
+        j.enabled = enabled;
+    }
+    store::save_jobs(&s.jobs).map_err(|e| e.to_string())
+}

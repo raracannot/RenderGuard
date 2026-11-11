@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+/// 新增布尔字段的默认值（容器上的 #[serde(default)] 会把 bool 变成 false，
+/// 所以「默认开启」的字段必须显式指定）
+pub fn yes() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
@@ -11,7 +17,7 @@ pub enum JobStatus {
     Partial,
     Failed,
     Stopped,
-    /// 依赖的任务没成功，本任务不会开始
+    /// 依赖功能已移除；保留变体只是为了能读回旧数据（加载时会转成 Failed）
     Blocked,
 }
 
@@ -97,12 +103,9 @@ pub struct Job {
     #[serde(default)]
     pub failed_frames: Vec<i32>,
 
-    /// 队列调度：数字越大越先跑；同优先级按创建时间
-    #[serde(default)]
-    pub priority: i32,
-    /// 依赖的任务 id：全部完成后本任务才会开始
-    #[serde(default)]
-    pub depends_on: Vec<String>,
+    /// 是否参与调度。取消勾选=暂时屏蔽：任务留在队列里但不会被渲染
+    #[serde(default = "yes")]
+    pub enabled: bool,
     /// 探测时发现的缺失贴图 / 丢失的库文件
     #[serde(default)]
     pub missing_files: Vec<String>,
@@ -152,8 +155,7 @@ impl Default for Job {
             cycles_devices: Vec::new(),
             attempts: BTreeMap::new(),
             failed_frames: Vec::new(),
-            priority: 0,
-            depends_on: Vec::new(),
+            enabled: true,
             missing_files: Vec::new(),
             error_kind: String::new(),
             avg_frame_sec: 0.0,
@@ -280,6 +282,8 @@ pub struct SceneInfo {
     pub frame_step: i32,
     pub cameras: Vec<String>,
     pub active_camera: Option<String>,
+    #[serde(default)]
+    pub frame_current: i32,
     pub resolution: [u32; 2],
     pub resolution_percentage: u32,
     pub fps: f64,

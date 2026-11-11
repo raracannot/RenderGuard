@@ -223,6 +223,11 @@ fn gui() {
             commands::log_path,
             commands::data_dir,
             commands::job_thumb,
+            commands::reorder_jobs,
+            commands::set_enabled,
+            commands::start_queue,
+            commands::start_single,
+            commands::set_all_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("RenderGuard 启动失败");

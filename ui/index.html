@@ -43,7 +43,8 @@
           <button class="btn" id="btnImport">导入</button>
           <button class="btn" id="btnExport">导出</button>
           <span class="sep"></span>
-          <button class="btn" id="btnStart">▶ 开始</button>
+          <button class="btn primary" id="btnStartQueue" title="把所有已勾选的任务按队列顺序跑完">▶ 开始全队列</button>
+          <button class="btn" id="btnStartSingle" title="只跑当前选中的那一个任务">▶ 仅渲染单项</button>
           <button class="btn" id="btnStop">■ 停止</button>
           <button class="btn" id="btnRetry">↻ 重试失败帧</button>
           <button class="btn danger" id="btnRemove">删除</button>
@@ -52,6 +53,8 @@
 
       <div class="table">
         <div class="thead">
+          <div class="col-grip" title="拖动调整渲染顺序"></div>
+          <div class="col-on"><input type="checkbox" id="chkAllOn" title="全选 / 全不选" /></div>
           <div class="col-name">任务</div>
           <div class="col-scene">场景</div>
           <div class="col-range">帧范围</div>
@@ -193,17 +196,16 @@
             </span>
           </label>
 
-          <label class="ov">
-            <input type="checkbox" id="chkType" />
+          <div class="ov always">
             <span class="ov-name">渲染类型</span>
             <span class="row-inline">
-              <select id="inpType" disabled>
-                <option value="anim">动画序列</option>
+              <select id="inpType">
                 <option value="still">单帧静帧</option>
+                <option value="anim">动画序列</option>
               </select>
-              <input type="number" id="inpStill" class="num" disabled title="静帧帧号" />
+              <input type="number" id="inpStill" class="num" title="静帧帧号（默认取工程里的当前活动帧）" />
             </span>
-          </label>
+          </div>
 
           <label class="ov">
             <input type="checkbox" id="chkFormat" />
@@ -253,21 +255,6 @@
             <input type="number" id="inpRetries" class="num" value="3" min="0" max="99" />
             <span>次</span>
           </label>
-        </div>
-
-        <div class="section-title">队列</div>
-        <div class="policy">
-          <label class="field-inline">
-            <span>优先级</span>
-            <input type="number" id="inpPriority" class="num sm" value="0" min="-9" max="9" />
-            <span>数字大的先跑</span>
-          </label>
-          <label class="field-inline">
-            <span>依赖任务</span>
-            <select id="inpDeps" multiple size="3" class="deps"></select>
-          </label>
-          <div class="field-hint">按住 Ctrl 多选；被依赖的任务没成功时，本任务不会启动</div>
-          <div class="field-hint warn" id="dlgMissing"></div>
         </div>
       </div>
     </div>

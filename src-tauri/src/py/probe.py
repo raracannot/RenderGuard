@@ -87,6 +87,7 @@ def probe_scene(sc):
         "frameStart": int(sc.frame_start),
         "frameEnd": int(sc.frame_end),
         "frameStep": int(sc.frame_step),
+        "frameCurrent": int(sc.frame_current),
         "cameras": [o.name for o in sc.objects if o.type == "CAMERA"],
         "activeCamera": sc.camera.name if sc.camera else None,
         "resolution": [int(r.resolution_x), int(r.resolution_y)],

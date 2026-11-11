@@ -183,7 +183,20 @@ pub fn settings_path() -> PathBuf {
 }
 
 pub fn load_jobs() -> Vec<Job> {
-    read_json::<Vec<Job>>(&jobs_path())
+    let mut jobs = read_json::<Vec<Job>>(&jobs_path());
+    // 依赖功能已移除：旧数据里残留的 blocked 状态按“失败”处理，避免永远卡住
+    let mut changed = false;
+    for j in jobs.iter_mut() {
+        if j.status == crate::model::JobStatus::Blocked {
+            j.status = crate::model::JobStatus::Failed;
+            j.progress.message = "依赖功能已移除，该任务未执行".into();
+            changed = true;
+        }
+    }
+    if changed {
+        let _ = save_jobs(&jobs);
+    }
+    jobs
 }
 
 pub fn save_jobs(jobs: &[Job]) -> std::io::Result<()> {

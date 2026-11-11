@@ -309,32 +309,6 @@ fn run_job(app: Option<AppHandle>, shared: Shared, id: String) {
             }
         }
 
-        // 依赖检查：前置任务没成功时不要白跑
-        if !j.depends_on.is_empty() {
-            let blocked = {
-                let s = match shared.lock() {
-                    Ok(s) => s,
-                    Err(_) => return,
-                };
-                match dep_check(&s.jobs, &j) {
-                    DepCheck::Blocked(reason) => Some(reason),
-                    _ => None,
-                }
-            };
-            if let Some(reason) = blocked {
-                emit_log(
-                    &app,
-                    &id,
-                    vec![LogLine {
-                        level: "error".into(),
-                        text: reason.clone(),
-                    }],
-                );
-                finalize(&app, &shared, &id, Instant::now(), Some(reason));
-                return;
-            }
-        }
-
         // 探测到的缺失文件（贴图/库）只告警，不阻止渲染
         if !j.missing_files.is_empty() {
             let sample: Vec<String> = j.missing_files.iter().take(3).cloned().collect();
@@ -768,6 +742,10 @@ fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant
             };
             if j.status == JobStatus::Done {
                 j.progress.percent = 100.0;
+                // 成功即自动取消勾选：队列会自己"排空"，
+                // 再点「开始全队列」不会重跑已完成的任务；
+                // 失败的保持勾选，于是再点一次就是"只重试失败的"。
+                j.enabled = false;
             }
             // 失败/部分完成时附一行日志尾部，便于直接定位
             if matches!(j.status, JobStatus::Failed | JobStatus::Partial) {
@@ -816,40 +794,12 @@ fn finalize(app: &Option<AppHandle>, shared: &Shared, id: &str, started: Instant
     schedule_next(app, shared);
 }
 
-/// 依赖检查结果
-enum DepCheck {
-    Ready,
-    Waiting,
-    Blocked(String),
-}
-
-fn dep_check(jobs: &[Job], job: &Job) -> DepCheck {
-    let mut waiting = false;
-    for d in &job.depends_on {
-        let Some(dep) = jobs.iter().find(|j| &j.id == d) else {
-            continue; // 依赖的任务已被删除，忽略
-        };
-        match dep.status {
-            JobStatus::Done => {}
-            JobStatus::Failed | JobStatus::Partial | JobStatus::Stopped | JobStatus::Blocked => {
-                return DepCheck::Blocked(format!("依赖的任务「{}」没有成功", dep.name));
-            }
-            _ => waiting = true,
-        }
-    }
-    if waiting {
-        DepCheck::Waiting
-    } else {
-        DepCheck::Ready
-    }
-}
-
-/// 按优先级/依赖挑任务，填满并发槽位（受 queue_auto 约束）
+/// 按队列顺序挑任务，填满并发槽位（受 queue_auto 约束）
 pub fn schedule_next(app: &Option<AppHandle>, shared: &Shared) {
     schedule_next_with(app, shared, false);
 }
 
-/// force = 用户手动点了「开始」：无视 queue_auto，但仍遵守依赖与并发上限
+/// force = 用户手动点了「开始」：无视 queue_auto，但仍遵守并发上限
 pub fn schedule_next_with(app: &Option<AppHandle>, shared: &Shared, force: bool) {
     let mut to_start: Vec<String> = Vec::new();
     let mut finished_summary: Option<String> = None;
@@ -862,50 +812,39 @@ pub fn schedule_next_with(app: &Option<AppHandle>, shared: &Shared, force: bool)
         }
         let limit = s.settings.max_concurrent.max(1) as usize;
 
-        // 1) 依赖不满足且已经无望的任务，标记为阻塞
-        let snapshot_jobs = s.jobs.clone();
-        for j in s.jobs.iter_mut() {
-            if j.status == JobStatus::Queued {
-                if let DepCheck::Blocked(reason) = dep_check(&snapshot_jobs, j) {
-                    j.status = JobStatus::Blocked;
-                    j.progress.message = reason;
-                }
-            }
-        }
-
-        // 2) 按优先级挑，填满槽位
+        // 按队列顺序（jobs 数组顺序）挑，被屏蔽的任务跳过
         while s.running.len() + to_start.len() < limit {
-            let mut cands: Vec<&Job> = s
-                .jobs
-                .iter()
-                .filter(|j| {
-                    j.status == JobStatus::Queued
-                        && !s.running.contains_key(&j.id)
-                        && !to_start.contains(&j.id)
-                })
-                .collect();
-            cands.retain(|j| matches!(dep_check(&s.jobs, j), DepCheck::Ready));
-            cands.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.created.cmp(&b.created)));
-            match cands.first() {
-                Some(j) => to_start.push(j.id.clone()),
+            let mut picked: Option<String> = None;
+            for j in s.jobs.iter() {
+                if j.status != JobStatus::Queued || !j.enabled {
+                    continue;
+                }
+                if s.running.contains_key(&j.id) || to_start.contains(&j.id) {
+                    continue;
+                }
+                picked = Some(j.id.clone());
+                break;
+            }
+            match picked {
+                Some(id) => to_start.push(id),
                 None => break,
             }
         }
 
-        // 3) 队列是否已经排空
+        // 队列是否已经排空：只算「已勾选且还没跑完」的任务
         let any_left = !s.running.is_empty()
             || !to_start.is_empty()
             || s.jobs
                 .iter()
-                .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Blocked));
+                .any(|j| j.enabled && j.status == JobStatus::Queued);
         if !any_left {
-            let done = s.jobs.iter().filter(|j| j.status == JobStatus::Done).count();
+            let done = s.jobs.iter().filter(|j| j.enabled && j.status == JobStatus::Done).count();
             let failed = s
                 .jobs
                 .iter()
-                .filter(|j| matches!(j.status, JobStatus::Failed | JobStatus::Partial))
+                .filter(|j| j.enabled && matches!(j.status, JobStatus::Failed | JobStatus::Partial))
                 .count();
-            let secs: f64 = s.jobs.iter().map(|j| j.elapsed).sum();
+            let secs: f64 = s.jobs.iter().filter(|j| j.enabled).map(|j| j.elapsed).sum();
             finished_summary = Some(format!(
                 "队列结束：成功 {} 个，失败 {} 个，共耗时 {}",
                 done,
