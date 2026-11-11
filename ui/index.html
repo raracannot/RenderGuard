@@ -23,6 +23,7 @@
     <div class="top-right">
       <span class="hint" id="dataDirHint"></span>
       <button class="ghost" id="btnDataDir">数据目录</button>
+      <button class="ghost" id="btnPack" title="把图片序列打包成一个视频（附带工具）">🎬 打包视频</button>
       <button class="ghost" id="btnSettings">设置</button>
     </div>
   </header>
@@ -42,7 +43,6 @@
           <button class="btn" id="btnAddFolder">文件夹</button>
           <button class="btn" id="btnImport">导入</button>
           <button class="btn" id="btnExport">导出</button>
-          <button class="btn" id="btnPack" title="把图片序列打包成一个视频">🎬 打包视频</button>
           <span class="sep"></span>
           <button class="btn primary" id="btnStartQueue" title="把所有已勾选的任务按队列顺序跑完">▶ 开始全队列</button>
           <button class="btn" id="btnStartSingle" title="只跑当前选中的那一个任务">▶ 仅渲染单项</button>
@@ -331,6 +331,9 @@
                 <option value="H264">H.264</option>
                 <option value="H265">H.265</option>
                 <option value="AV1">AV1</option>
+                <option value="PRORES">ProRes</option>
+                <option value="PNG">PNG（无损）</option>
+                <option value="QTRLE">QTRLE（动画）</option>
               </select>
               <select id="packQuality">
                 <option value="HIGH">高画质</option>
@@ -339,7 +342,19 @@
                 <option value="PERC_LOSSLESS">接近无损</option>
                 <option value="LOSSLESS">无损</option>
               </select>
+              <select id="packProres" class="hidden">
+                <option value="4444">ProRes 4444（带 alpha）</option>
+                <option value="4444_XQ">ProRes 4444 XQ</option>
+                <option value="422_HQ">ProRes 422 HQ</option>
+                <option value="422_STD">ProRes 422</option>
+                <option value="422_LT">ProRes 422 LT</option>
+                <option value="422_PROXY">ProRes 422 Proxy</option>
+              </select>
             </div>
+            <label class="chk" style="margin-top:6px">
+              <input type="checkbox" id="packAlpha" />
+              <span>保留透明通道<em>只有 MOV + PNG / QTRLE / ProRes 4444 支持</em></span>
+            </label>
             <div class="field-hint">用的是 Blender 内置编码器，不需要另外装 ffmpeg</div>
           </div>
         </div>

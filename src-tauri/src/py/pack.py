@@ -163,6 +163,22 @@ def main():
     r.ffmpeg.codec = cfg.get("codec") or "H264"
     r.ffmpeg.constant_rate_factor = cfg.get("quality") or "MEDIUM"
 
+    # ProRes 档位：只有 4444 / 4444_XQ 带 alpha
+    if r.ffmpeg.codec == "PRORES":
+        prof = (cfg.get("prores") or "").strip()
+        if prof:
+            try:
+                r.ffmpeg.ffmpeg_prores_profile = prof
+            except Exception as exc:
+                print("PACK_WARN ProRes 档位设置失败：%s" % exc)
+
+    # 要保留 alpha 就必须以 RGBA 渲染，否则编码器只会拿到 RGB
+    if cfg.get("rgba"):
+        try:
+            r.image_settings.color_mode = "RGBA"
+        except Exception:
+            pass
+
     d = os.path.dirname(out)
     if d:
         os.makedirs(d, exist_ok=True)

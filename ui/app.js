@@ -1615,6 +1615,7 @@ function openPack() {
   $("packStart").disabled = false;
   $("packCancel").disabled = true;
   $("packOverlay").classList.remove("hidden");
+  syncPackCodecUI();
   if (p.dir) probePackDir();
 }
 
@@ -1653,6 +1654,8 @@ async function startPack() {
     quality: $("packQuality").value,
     audio: $("packAudio").value.trim(),
     bg: "#0a0a0a",
+    rgba: $("packAlpha").checked,
+    prores: $("packProres").value,
   };
   if (!cfg.srcDir) return toast("请先选择序列文件夹", "err");
   savePackPrefs();
@@ -1702,4 +1705,38 @@ function wirePack() {
     setPackProgress(0, "正在取消…");
   };
   $("packDir").addEventListener("change", probePackDir);
+
+  // 编解码器联动：ProRes / PNG / QTRLE 只在 MOV 里；换编码器时自动切容器
+  const onCodec = () => {
+    const c = $("packCodec").value;
+    if ((c === "PRORES" || c === "PNG" || c === "QTRLE") && $("packFormat").value !== "QUICKTIME") {
+      $("packFormat").value = "QUICKTIME";
+    }
+    if (c !== "PRORES" && c !== "PNG" && c !== "QTRLE" && c !== "H264" && c !== "H265" && c !== "AV1") {
+      $("packFormat").value = "MPEG4";
+      $("packCodec").value = "H264";
+    }
+    syncPackCodecUI();
+  };
+  $("packCodec").addEventListener("change", onCodec);
+  $("packFormat").addEventListener("change", onCodec);
+  $("packProres").addEventListener("change", syncPackCodecUI);
+}
+
+/* 编码器 / 格式 / alpha 联动 */
+function syncPackCodecUI() {
+  const fmt = $("packFormat").value;
+  const codec = $("packCodec").value;
+  const prores = $("packProres");
+  const alpha = $("packAlpha");
+  if (prores) prores.classList.toggle("hidden", codec !== "PRORES");
+
+  const isProresAlpha = codec === "PRORES" && prores &&
+    (prores.value === "4444" || prores.value === "4444_XQ");
+  const alphaOk = fmt === "QUICKTIME" &&
+    (codec === "PNG" || codec === "QTRLE" || isProresAlpha);
+  if (alpha) {
+    alpha.disabled = !alphaOk;
+    if (!alphaOk) alpha.checked = false;
+  }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "renderguard"
-version = "1.0.3"
+version = "1.0.4"
 description = "Blender 批量渲染队列 · 崩溃自动续接"
 edition = "2021"
 rust-version = "1.77"

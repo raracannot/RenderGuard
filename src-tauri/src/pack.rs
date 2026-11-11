@@ -36,6 +36,10 @@ pub struct PackCfg {
     /// 可选的音轨文件（音频或带音轨的视频）
     pub audio: String,
     pub bg: String,
+    /// 保留 alpha（只有 MOV + PNG / QTRLE / ProRes 4444 支持）
+    pub rgba: bool,
+    /// ProRes 档位：4444 / 4444_XQ / 422_HQ / 422_STD / 422_LT / 422_PROXY
+    pub prores: String,
 }
 
 impl Default for PackCfg {
@@ -50,6 +54,8 @@ impl Default for PackCfg {
             quality: "MEDIUM".into(),
             audio: String::new(),
             bg: "#0a0a0a".into(),
+            rgba: false,
+            prores: "4444".into(),
         }
     }
 }
