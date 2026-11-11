@@ -23,7 +23,10 @@
     <div class="top-right">
       <span class="hint" id="dataDirHint"></span>
       <button class="ghost" id="btnDataDir">数据目录</button>
-      <button class="ghost" id="btnPack" title="把图片序列打包成一个视频（附带工具）">🎬 打包视频</button>
+      <button class="ghost" id="btnRename" title="批量重命名文件">重命名</button>
+      <button class="ghost" id="btnImgTool" title="批量转换 / 缩放 / 压缩 / 水印">图像</button>
+
+      <button class="ghost" id="btnPack" title="把图片序列打包成一个视频">视频</button>
       <button class="ghost" id="btnSettings">设置</button>
     </div>
   </header>
@@ -263,6 +266,397 @@
     <div class="dialog-foot">
       <button class="btn" id="dlgCancel">取消</button>
       <button class="btn primary" id="dlgSave">加入队列</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============ 图像工具箱（转换 / 压缩 / 缩放 / 水印） ============ -->
+<div class="overlay hidden" id="imgOverlay">
+  <div class="dialog small img-dialog">
+    <div class="dialog-head">
+      <span>图像工具箱</span>
+      <button class="ghost small" id="imgClose">✕</button>
+    </div>
+
+    <div class="tabs" id="imgTabs">
+      <button class="tab on" data-tab="convert">格式转换</button>
+      <button class="tab" data-tab="compress">图像压缩</button>
+      <button class="tab" data-tab="resize">图像缩放</button>
+      <button class="tab" data-tab="mark">水印添加</button>
+    </div>
+
+    <div class="dialog-body">
+      <!-- 共用来源 -->
+      <div class="section">
+        <div class="section-title">来源</div>
+        <div class="field">
+          <label for="srcDir">目录</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="srcDir" placeholder="可填多个目录，逗号分隔" />
+              <button class="btn small" id="srcBrowse">浏览</button>
+            </div>
+            <div class="row-inline" style="margin-top:6px">
+              <span class="unit">层数</span>
+              <input type="number" id="srcDepth" class="num sm" value="0" min="0" max="8" />
+              <span class="unit">扩展名</span>
+              <input type="text" id="srcExts" class="num" style="width:120px" placeholder="png" />
+              <span class="dim small" id="srcStat"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- 格式转换 ---------- -->
+      <div id="paneConvert">
+        <div class="section">
+          <div class="section-title">输出格式</div>
+          <div class="field">
+            <label for="cvFormat">格式</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <select id="cvFormat">
+                  <option value="jpg">JPG</option>
+                  <option value="png">PNG</option>
+                  <option value="tiff">TIFF</option>
+                  <option value="bmp">BMP</option>
+                </select>
+                <span class="unit">质量</span>
+                <input type="number" id="cvQuality" class="num sm" value="90" min="1" max="100" />
+                <span class="unit">（仅 JPG）</span>
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">透明处</span>
+                <select id="cvAlpha">
+                  <option value="white">垫白底</option>
+                  <option value="black">垫黑底</option>
+                  <option value="skip">跳过带透明的图</option>
+                </select>
+                <span class="unit">（转 JPG 时生效）</span>
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">输出目录</span>
+                <input type="text" id="cvOutDir" placeholder="留空 = 源目录\_converted" />
+                <input type="text" id="cvSuffix" class="num sm" style="width:90px" placeholder="后缀" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- 图像压缩 ---------- -->
+      <div id="paneCompress" class="hidden">
+        <div class="section">
+          <div class="section-title">压缩方式</div>
+          <div class="field">
+            <label for="cpMode">模式</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <select id="cpMode">
+                  <option value="target">按目标体积</option>
+                  <option value="quality">按固定质量</option>
+                </select>
+                <span class="unit" id="cpTargetLabel">每张不超过</span>
+                <input type="number" id="cpTargetKb" class="num" style="width:90px" value="300" min="1" />
+                <span class="unit">KB</span>
+                <span class="unit" id="cpQualityLabel" style="display:none">质量</span>
+                <input type="number" id="cpQuality" class="num sm" value="80" min="1" max="100" style="display:none" />
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">输出格式</span>
+                <select id="cpFormat">
+                  <option value="jpg">JPG</option>
+                  <option value="png">PNG（无损重压）</option>
+                </select>
+                <span class="unit">透明处</span>
+                <select id="cpAlpha">
+                  <option value="white">垫白底</option>
+                  <option value="black">垫黑底</option>
+                  <option value="skip">跳过带透明的图</option>
+                </select>
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">输出目录</span>
+                <input type="text" id="cpOutDir" placeholder="留空 = 源目录\_compressed" />
+                <input type="text" id="cpSuffix" class="num sm" style="width:90px" placeholder="后缀" />
+              </div>
+              <div class="field-hint">目标体积模式会逐张二分搜索质量，速度略慢；PNG 不支持按体积压缩</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- 图像缩放 ---------- -->
+      <div id="paneResize" class="hidden">
+        <div class="section">
+          <div class="section-title">缩放设置</div>
+          <div class="field">
+            <label for="rsMode">方式</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <select id="rsMode">
+                  <option value="long_edge">按长边</option>
+                  <option value="percent">按百分比</option>
+                  <option value="exact">固定尺寸</option>
+                </select>
+                <input type="number" id="rsLongEdge" class="num" style="width:90px" value="1920" min="16" />
+                <span class="unit">px</span>
+                <input type="number" id="rsPercent" class="num sm" value="50" min="1" max="400" style="display:none" />
+                <span class="unit" id="rsPercentUnit" style="display:none">%</span>
+                <input type="number" id="rsW" class="num sm" value="1920" min="16" style="display:none" />
+                <span class="unit" id="rsTimes" style="display:none">×</span>
+                <input type="number" id="rsH" class="num sm" value="1080" min="16" style="display:none" />
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <select id="rsFilter">
+                  <option value="lanczos3">Lanczos3（最锐）</option>
+                  <option value="catmullrom">CatmullRom（均衡）</option>
+                  <option value="triangle">Triangle（最快）</option>
+                  <option value="nearest">Nearest（像素风）</option>
+                </select>
+                <label class="chk inline"><input type="checkbox" id="rsOnlyShrink" checked /><span>只缩不放</span></label>
+                <label class="chk inline"><input type="checkbox" id="rsEven" checked /><span>宽高偶数</span></label>
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">输出格式</span>
+                <select id="rsFormat">
+                  <option value="keep">保持原格式</option>
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPG</option>
+                </select>
+                <span class="unit">质量</span>
+                <input type="number" id="rsQuality" class="num sm" value="92" min="1" max="100" />
+              </div>
+              <div class="row-inline" style="margin-top:6px">
+                <span class="unit">输出目录</span>
+                <input type="text" id="rsOutDir" placeholder="留空 = 源目录\_resized" />
+                <input type="text" id="rsSuffix" class="num sm" style="width:90px" placeholder="后缀" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- 水印添加 ---------- -->
+      <div id="paneMark" class="hidden">
+        <div class="section">
+          <div class="section-title">水印内容</div>
+
+          <div class="field">
+            <label for="wmKind">类型</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <select id="wmKind">
+                  <option value="text">文字水印</option>
+                  <option value="image">图像水印</option>
+                </select>
+                <input type="text" id="wmText" value="© RARA" placeholder="要显示的文字" />
+                <input type="text" id="wmImage" placeholder="PNG 图片路径" style="display:none" />
+                <button class="btn small" id="wmPickImage" style="display:none">选图</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="wmSize">大小与颜色</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <span class="unit">字号</span>
+                <input type="number" id="wmSize" class="num sm" value="5" min="1" max="60" />
+                <span class="unit">% 画面高</span>
+              </div>
+              <div class="row-inline">
+                <span class="unit">颜色</span>
+                <input type="color" id="wmColor" value="#ffffff" class="colorpick" />
+                <span class="unit">不透明度</span>
+                <input type="number" id="wmOpacity" class="num sm" value="55" min="1" max="100" />
+                <span class="unit">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">位置</div>
+
+          <div class="field">
+            <label for="wmMode">铺法</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <select id="wmMode">
+                  <option value="single">单个水印</option>
+                  <option value="tile">平铺满图</option>
+                </select>
+                <select id="wmPos">
+                  <option value="br">右下</option>
+                  <option value="bc">中下</option>
+                  <option value="bl">左下</option>
+                  <option value="mr">右中</option>
+                  <option value="mc">正中</option>
+                  <option value="ml">左中</option>
+                  <option value="tr">右上</option>
+                  <option value="tc">中上</option>
+                  <option value="tl">左上</option>
+                </select>
+              </div>
+              <div class="field-hint">平铺时位置无效，整组会自动居中</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>偏移 / 间距</label>
+            <div class="field-ctl">
+              <div class="row-inline">
+                <span class="unit">单个水印偏移</span>
+                <span class="unit tag">X</span>
+                <input type="number" id="wmOffX" class="num sm" value="40" />
+                <span class="unit tag">Y</span>
+                <input type="number" id="wmOffY" class="num sm" value="40" />
+                <span class="unit">px</span>
+              </div>
+              <div class="row-inline" id="wmGapRow">
+                <span class="unit">平铺间距</span>
+                <span class="unit tag">X</span>
+                <input type="number" id="wmGapX" class="num sm" value="120" min="0" />
+                <span class="unit tag">Y</span>
+                <input type="number" id="wmGapY" class="num sm" value="90" min="0" />
+                <span class="unit">px</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">预览（取第一张）</div>
+          <div class="wm-preview" id="wmPreview"><span class="dim small">点「预览」看效果</span></div>
+        </div>
+          </div>
+
+    <div class="dialog-foot">
+      <div class="prog ip-prog" style="--p:0;flex:1;margin-right:12px"><div class="bar"><i style="width:0%"></i></div><span id="imgMsg">待开始</span></div>
+      <button class="btn" id="imgCancel">取消</button>
+      <button class="btn" id="wmPreviewBtn" style="display:none">预览</button>
+      <button class="btn primary" id="imgRun">开始转换</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ============ 批量重命名弹窗 ============ -->
+<div class="overlay hidden" id="rnOverlay">
+  <div class="dialog small rn-dialog">
+    <div class="dialog-head">
+      <span>批量重命名</span>
+      <button class="ghost small" id="rnClose">✕</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="section">
+        <div class="section-title">文件范围</div>
+
+        <div class="field">
+          <label for="rnDir">目录</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <input type="text" id="rnDir" placeholder="可填多个目录，用逗号分隔" />
+              <button class="btn small" id="rnBrowse">浏览</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="rnDepth">递归 / 过滤</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <span class="unit">层数</span>
+              <input type="number" id="rnDepth" class="num sm" value="0" min="0" max="8" />
+              <span class="unit">扩展名</span>
+              <input type="text" id="rnExts" class="num" style="width:110px" placeholder="png,jpg" />
+            </div>
+            <div class="row-inline" style="margin-top:6px">
+              <span class="unit">包含</span>
+              <input type="text" id="rnInclude" placeholder="只处理名字含这些字的" />
+              <span class="unit">排除</span>
+              <input type="text" id="rnExclude" placeholder="名字含这些字的跳过" />
+            </div>
+            <div class="field-hint">层数 0 = 只处理当前目录；扩展名留空 = 全部</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="rnSort">排序依据</label>
+          <div class="field-ctl">
+            <select id="rnSort">
+              <option value="name_asc">名称正序（按数字大小）</option>
+              <option value="name_desc">名称倒序</option>
+              <option value="time_asc">修改时间正序</option>
+              <option value="time_desc">修改时间倒序</option>
+              <option value="size_asc">体积从小到大</option>
+              <option value="size_desc">体积从大到小</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">命名规则</div>
+
+        <div class="field">
+          <label for="rnTemplate">模板</label>
+          <div class="field-ctl">
+            <input type="text" id="rnTemplate" value="&lt;NUMBER&gt;_&lt;SELF&gt;" />
+            <div class="field-hint">
+              替换符：&lt;NUMBER&gt; 序号 · &lt;SELF&gt; 原名 · &lt;EXT&gt; 后缀 · &lt;FOLDER&gt; 文件夹名 ·
+              &lt;CN&gt; 中文 · &lt;EN&gt; 英文 · &lt;NU&gt; 数字 · &lt;PX&gt; 分辨率 · &lt;BIT&gt; 位深 ·
+              &lt;MD5&gt; &lt;SHA1&gt; &lt;SHA256&gt; 哈希 · &lt;DATE&gt; 当天日期
+            </div>
+            <div class="field-hint">
+              二次操作：&lt;SELF/UPPER&gt; 转大写 · /CUT:5 保留前5字 · /DEL:0-3 删除前3字 ·
+              /REPLACE:旧:新 · /PAD:6 补零到6位 · /RE:正则 · /MATH:self+1
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>编号</label>
+          <div class="field-ctl">
+            <div class="row-inline">
+              <span class="unit">起始</span>
+              <input type="number" id="rnStart" class="num sm" value="1" />
+              <span class="unit">增量</span>
+              <input type="number" id="rnStep" class="num sm" value="1" />
+              <span class="unit">位数</span>
+              <input type="number" id="rnPad" class="num sm" value="4" min="0" max="10" />
+              <label class="chk inline"><input type="checkbox" id="rnZeroPad" checked /><span>补零</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="rnConflict">重名处理</label>
+          <div class="field-ctl">
+            <select id="rnConflict">
+              <option value="skip">跳过（推荐，最安全）</option>
+              <option value="auto">自动加序号</option>
+              <option value="overwrite">覆盖原文件</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          预览 <span class="dim small" id="rnStat">点「预览」查看</span>
+        </div>
+        <div class="rn-list" id="rnList"></div>
+      </div>
+    </div>
+
+    <div class="dialog-foot">
+      <button class="btn" id="rnUndo">撤销上一次</button>
+      <button class="btn" id="rnPreview">预览</button>
+      <button class="btn primary" id="rnApply">执行重命名</button>
     </div>
   </div>
 </div>

@@ -1531,6 +1531,27 @@ async function boot() {
 
   await listen("rg://notice", (e) => showNotice(e.payload || {}));
 
+  await listen("rg://imgproc", (e) => {
+    const st = e.payload || {};
+    if (st.total) setImgProgress(st.percent || 0, `处理中 ${st.done}/${st.total}`);
+    if (!st.running) {
+      $("imgRun").disabled = false;
+      setImgProgress(100, st.message || "完成");
+      toast(st.message || "处理完成");
+      srcStat();
+    }
+  });
+
+  await listen("rg://watermark", (e) => {
+    const st = e.payload || {};
+    if (st.total && st.running) setImgProgress(st.percent || 0, `水印中 ${st.done}/${st.total}`);
+    if (!st.running) {
+      $("imgRun").disabled = false;
+      setImgProgress(100, st.message || "完成");
+      toast(st.message || "水印完成");
+    }
+  });
+
   await listen("rg://pack", (e) => {
     const st = e.payload || {};
     setPackProgress(st.percent || 0, st.message || "");
@@ -1572,6 +1593,8 @@ async function boot() {
 }
 
 wirePack();
+wireRename();
+wireImgTool();
 boot();
 
 /* ------------------------------------------------------------ 打包视频 */
@@ -1739,4 +1762,388 @@ function syncPackCodecUI() {
     alpha.disabled = !alphaOk;
     if (!alphaOk) alpha.checked = false;
   }
+}
+
+/* ------------------------------------------------------------ 批量重命名 */
+
+const RN_PREF = "rg.renamePrefs";
+
+function rnCfg() {
+  return {
+    dirs: $("rnDir").value.trim(),
+    depth: parseInt($("rnDepth").value, 10) || 0,
+    include: $("rnInclude").value.trim(),
+    exclude: $("rnExclude").value.trim(),
+    exts: $("rnExts").value.trim(),
+    sort: $("rnSort").value,
+    template: $("rnTemplate").value,
+    start: parseInt($("rnStart").value, 10) || 1,
+    increment: parseInt($("rnStep").value, 10) || 1,
+    padding: parseInt($("rnPad").value, 10),
+    zeroPad: $("rnZeroPad").checked,
+    randomize: false,
+    conflict: $("rnConflict").value,
+  };
+}
+
+function rnSavePrefs() {
+  const c = rnCfg();
+  try {
+    localStorage.setItem(RN_PREF, JSON.stringify(c));
+  } catch (_) {}
+}
+
+function rnRestorePrefs() {
+  let p = {};
+  try {
+    p = JSON.parse(localStorage.getItem(RN_PREF) || "{}");
+  } catch (_) {}
+  $("rnDir").value = p.dirs || "";
+  $("rnDepth").value = p.depth ?? 0;
+  $("rnInclude").value = p.include || "";
+  $("rnExclude").value = p.exclude || "";
+  $("rnExts").value = p.exts || "png";
+  $("rnSort").value = p.sort || "name_asc";
+  $("rnTemplate").value = p.template || "<NUMBER>_<SELF>";
+  $("rnStart").value = p.start ?? 1;
+  $("rnStep").value = p.increment ?? 1;
+  $("rnPad").value = p.padding ?? 4;
+  $("rnZeroPad").checked = p.zeroPad !== false;
+  $("rnConflict").value = p.conflict || "skip";
+}
+
+async function rnRefreshUndo() {
+  try {
+    const v = await invoke("rename_undo_state");
+    $("rnUndo").disabled = v == null;
+  } catch (_) {
+    $("rnUndo").disabled = true;
+  }
+}
+
+function rnRender(pv) {
+  const box = $("rnList");
+  box.innerHTML = "";
+  if (!pv || pv.error) {
+    box.innerHTML = `<div class="dim small">${esc(pv?.error || "还没有预览")}</div>`;
+    $("rnStat").textContent = "";
+    return;
+  }
+  $("rnStat").textContent = `共 ${pv.total} 条` + (pv.bad ? ` · ${pv.bad} 条有冲突` : " · 无冲突");
+  const frag = document.createDocumentFragment();
+  for (const r of pv.rows) {
+    const row = document.createElement("div");
+    row.className = "rn-row" + (r.issue ? " bad" : "");
+    const from = r.name + r.ext;
+    const to = r.newName + r.newExt;
+    row.innerHTML = `<span class="rn-from" title="${esc(r.src)}">${esc(from)}</span>
+      <span class="rn-arrow">→</span>
+      <span class="rn-to">${esc(to)}</span>
+      ${r.issue ? `<span class="rn-issue" title="${esc(r.detail)}">${esc(
+        { dup: "重名", exists: "已存在", illegal: "非法字符", long: "过长" }[r.issue] || r.issue
+      )}</span>` : ""}`;
+    frag.appendChild(row);
+  }
+  box.appendChild(frag);
+}
+
+async function rnPreview() {
+  const cfg = rnCfg();
+  if (!cfg.dirs) return toast("请先选择目录", "err");
+  rnSavePrefs();
+  try {
+    const pv = await invoke("rename_preview", { cfg });
+    rnRender(pv);
+    if (pv.error) toast(pv.error, "err");
+  } catch (e) {
+    toast("预览失败：" + String(e).slice(0, 160), "err");
+  }
+}
+
+async function rnApply() {
+  const cfg = rnCfg();
+  if (!cfg.dirs) return toast("请先选择目录", "err");
+  try {
+    const r = await invoke("rename_apply", { cfg });
+    toast(`重命名完成：成功 ${r.done} 个` + (r.skipped ? `，跳过 ${r.skipped} 个` : ""));
+    await rnRefreshUndo();
+    await rnPreview();
+    await refresh();
+  } catch (e) {
+    toast("重命名失败：" + String(e).slice(0, 200), "err");
+  }
+}
+
+function wireRename() {
+  $("btnRename").onclick = () => {
+    rnRestorePrefs();
+    $("rnList").innerHTML = `<div class="dim small">还没有预览</div>`;
+    $("rnStat").textContent = "点「预览」查看";
+    $("rnOverlay").classList.remove("hidden");
+    rnRefreshUndo();
+    if ($("rnDir").value.trim()) rnPreview();
+  };
+  $("rnClose").onclick = () => $("rnOverlay").classList.add("hidden");
+  $("rnBrowse").onclick = async () => {
+    const p = await dlg.open({ directory: true });
+    if (!p) return;
+    const v = Array.isArray(p) ? p[0] : p;
+    $("rnDir").value = v;
+    await rnPreview();
+  };
+  $("rnPreview").onclick = rnPreview;
+  $("rnApply").onclick = rnApply;
+  $("rnUndo").onclick = async () => {
+    try {
+      const n = await invoke("rename_undo");
+      toast(`已撤销，恢复 ${n} 个文件`);
+      await rnRefreshUndo();
+      await rnPreview();
+      await refresh();
+    } catch (e) {
+      toast("撤销失败：" + String(e).slice(0, 160), "err");
+    }
+  };
+}
+
+/* ------------------------------------------------------------ 图像工具箱 */
+
+let imgTab = "convert";
+
+const IMG_TABS = {
+  convert: { run: "开始转换", preview: false },
+  compress: { run: "开始压缩", preview: false },
+  resize: { run: "开始缩放", preview: false },
+  mark: { run: "开始加水印", preview: true },
+};
+
+function imgSource() {
+  return {
+    dirs: $("srcDir").value.trim(),
+    depth: parseInt($("srcDepth").value, 10) || 0,
+    exts: $("srcExts").value.trim(),
+  };
+}
+
+/** 四个标签页共用一套 ProcCfg，只开当前页需要的那几项 */
+function imgProcCfg(tab) {
+  const s = imgSource();
+  const base = {
+    ...s,
+    outDir: "",
+    suffix: "",
+    format: "keep",
+    quality: 90,
+    targetKb: 0,
+    resize: "none",
+    percent: 100,
+    longEdge: 1920,
+    width: 1920,
+    height: 1080,
+    filter: "lanczos3",
+    onlyShrink: true,
+    even: true,
+    alpha: "white",
+    threads: 0,
+  };
+
+  if (tab === "convert") {
+    base.format = $("cvFormat").value;
+    base.quality = parseInt($("cvQuality").value, 10) || 90;
+    base.alpha = $("cvAlpha").value;
+    base.outDir = $("cvOutDir").value.trim();
+    base.suffix = $("cvSuffix").value.trim();
+    if (!base.outDir) base.outDir = "";
+  } else if (tab === "compress") {
+    base.format = $("cpFormat").value;
+    base.alpha = $("cpAlpha").value;
+    base.outDir = $("cpOutDir").value.trim();
+    base.suffix = $("cpSuffix").value.trim();
+    if ($("cpMode").value === "target" && base.format === "jpg") {
+      base.targetKb = parseInt($("cpTargetKb").value, 10) || 0;
+    } else {
+      base.quality = parseInt($("cpQuality").value, 10) || 80;
+    }
+  } else if (tab === "resize") {
+    base.resize = $("rsMode").value;
+    base.percent = parseFloat($("rsPercent").value) || 100;
+    base.longEdge = parseInt($("rsLongEdge").value, 10) || 1920;
+    base.width = parseInt($("rsW").value, 10) || 1920;
+    base.height = parseInt($("rsH").value, 10) || 1080;
+    base.filter = $("rsFilter").value;
+    base.onlyShrink = $("rsOnlyShrink").checked;
+    base.even = $("rsEven").checked;
+    base.format = $("rsFormat").value;
+    base.quality = parseInt($("rsQuality").value, 10) || 92;
+    base.outDir = $("rsOutDir").value.trim();
+    base.suffix = $("rsSuffix").value.trim();
+  }
+  return base;
+}
+
+function wmCfg() {
+  const s = imgSource();
+  return {
+    ...s,
+    outDir: "",
+    suffix: "_wm",
+    kind: $("wmKind").value,
+    text: $("wmText").value,
+    fontPercent: parseFloat($("wmSize").value) || 5,
+    color: $("wmColor").value || "#ffffff",
+    opacity: (parseFloat($("wmOpacity").value) || 55) / 100,
+    image: $("wmImage").value.trim(),
+    imagePercent: parseFloat($("wmSize").value) || 12,
+    mode: $("wmMode").value,
+    pos: $("wmPos").value,
+    offsetX: parseInt($("wmOffX").value, 10) || 0,
+    offsetY: parseInt($("wmOffY").value, 10) || 0,
+    gapX: parseInt($("wmGapX").value, 10) || 0,
+    gapY: parseInt($("wmGapY").value, 10) || 0,
+    outFormat: "png",
+    quality: 92,
+    threads: 0,
+  };
+}
+
+function rsSyncUI() {
+  const m = $("rsMode").value;
+  $("rsLongEdge").style.display = m === "long_edge" ? "" : "none";
+  $("rsPercent").style.display = m === "percent" ? "" : "none";
+  $("rsPercentUnit").style.display = m === "percent" ? "" : "none";
+  $("rsW").style.display = m === "exact" ? "" : "none";
+  $("rsTimes").style.display = m === "exact" ? "" : "none";
+  $("rsH").style.display = m === "exact" ? "" : "none";
+}
+
+function cpSyncUI() {
+  const byTarget = $("cpMode").value === "target";
+  $("cpTargetLabel").style.display = byTarget ? "" : "none";
+  $("cpTargetKb").style.display = byTarget ? "" : "none";
+  $("cpQualityLabel").style.display = byTarget ? "none" : "";
+  $("cpQuality").style.display = byTarget ? "none" : "";
+  const isPng = $("cpFormat").value === "png";
+  $("cpTargetKb").disabled = isPng;
+  if (isPng && byTarget) {
+    $("cpMode").value = "quality";
+    cpSyncUI();
+  }
+}
+
+function wmSyncUI() {
+  const isImg = $("wmKind").value === "image";
+  $("wmText").style.display = isImg ? "none" : "";
+  $("wmImage").style.display = isImg ? "" : "none";
+  $("wmPickImage").style.display = isImg ? "" : "none";
+  $("wmColor").style.display = isImg ? "none" : "";
+  $("wmGapRow").style.display = $("wmMode").value === "tile" ? "" : "none";
+  $("wmPos").disabled = $("wmMode").value === "tile";
+}
+
+function switchImgTab(tab) {
+  imgTab = tab;
+  document.querySelectorAll("#imgTabs .tab").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === tab);
+  });
+  ["convert", "compress", "resize", "mark"].forEach((t) => {
+    const pane = { convert: "paneConvert", compress: "paneCompress", resize: "paneResize", mark: "paneMark" }[t];
+    $(pane).classList.toggle("hidden", t !== tab);
+  });
+  $("imgRun").textContent = IMG_TABS[tab].run;
+  $("wmPreviewBtn").style.display = IMG_TABS[tab].preview ? "" : "none";
+}
+
+function setImgProgress(pct, msg) {
+  const box = document.querySelector(".ip-prog");
+  if (!box) return;
+  box.style.setProperty("--p", (pct || 0).toFixed(1));
+  const bar = box.querySelector(".bar i");
+  if (bar) bar.style.width = (pct || 0).toFixed(1) + "%";
+  $("imgMsg").textContent = msg;
+}
+
+async function srcStat() {
+  const cfg = imgProcCfg(imgTab === "mark" ? "convert" : imgTab);
+  if (!cfg.dirs) {
+    $("srcStat").textContent = "";
+    return;
+  }
+  try {
+    const s = await invoke("imgproc_stat", { cfg });
+    $("srcStat").textContent = s.count
+      ? `· ${s.count} 张 / ${(s.bytes / 1048576).toFixed(1)} MB`
+      : "· 没找到图片";
+  } catch (_) {
+    $("srcStat").textContent = "";
+  }
+}
+
+function openImgTool(tab) {
+  $("imgOverlay").classList.remove("hidden");
+  switchImgTab(tab || "convert");
+  rsSyncUI();
+  cpSyncUI();
+  wmSyncUI();
+  setImgProgress(0, "待开始");
+  $("imgRun").disabled = false;
+  srcStat();
+}
+
+function wireImgTool() {
+  $("btnImgTool").onclick = () => openImgTool("convert");
+  $("imgClose").onclick = $("imgCancel").onclick = () => $("imgOverlay").classList.add("hidden");
+  document.querySelectorAll("#imgTabs .tab").forEach((b) => {
+    b.onclick = () => switchImgTab(b.dataset.tab);
+  });
+
+  $("srcBrowse").onclick = async () => {
+    const p = await dlg.open({ directory: true });
+    if (!p) return;
+    $("srcDir").value = Array.isArray(p) ? p[0] : p;
+    await srcStat();
+  };
+  ["srcDir", "srcExts", "srcDepth"].forEach((k) => {
+    const el = $(k);
+    if (el) el.addEventListener("change", srcStat);
+  });
+  $("rsMode").addEventListener("change", rsSyncUI);
+  $("cpMode").addEventListener("change", cpSyncUI);
+  $("cpFormat").addEventListener("change", cpSyncUI);
+  ["wmKind", "wmMode"].forEach((k) => $(k).addEventListener("change", wmSyncUI));
+
+  $("wmPickImage").onclick = async () => {
+    const p = await dlg.open({ filters: [{ name: "图片", extensions: ["png", "jpg", "webp"] }] });
+    if (!p) return;
+    $("wmImage").value = Array.isArray(p) ? p[0] : p;
+  };
+
+  $("wmPreviewBtn").onclick = async () => {
+    const cfg = wmCfg();
+    if (!cfg.dirs) return toast("请先选择目录", "err");
+    try {
+      const url = await invoke("watermark_preview", { cfg });
+      $("wmPreview").innerHTML = `<img src="${url}" alt="预览" />`;
+    } catch (e) {
+      toast("预览失败：" + String(e).slice(0, 160), "err");
+    }
+  };
+
+  $("imgRun").onclick = async () => {
+    const src = imgSource();
+    if (!src.dirs) return toast("请先选择目录", "err");
+    $("imgRun").disabled = true;
+    setImgProgress(0, "启动中…");
+    try {
+      if (imgTab === "mark") {
+        await invoke("watermark_start", { cfg: wmCfg() });
+        toast("已开始加水印");
+      } else {
+        await invoke("imgproc_start", { cfg: imgProcCfg(imgTab) });
+      }
+    } catch (e) {
+      $("imgRun").disabled = false;
+      toast(String(e).slice(0, 200), "err");
+      setImgProgress(0, "失败");
+    }
+  };
 }

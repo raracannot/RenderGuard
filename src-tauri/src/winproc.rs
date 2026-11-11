@@ -240,3 +240,69 @@ pub fn free_space(path: &std::path::Path) -> Option<u64> {
         Some(free)
     }
 }
+
+// ---------------------------------------------------------------- 文件创建时间
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *mut c_void,
+        disposition: u32,
+        flags: u32,
+        template: *mut c_void,
+    ) -> *mut c_void;
+    fn GetFileTime(
+        file: *mut c_void,
+        creation: *mut FILETIME,
+        access: *mut FILETIME,
+        write: *mut FILETIME,
+    ) -> i32;
+}
+
+const GENERIC_READ: u32 = 0x8000_0000;
+const FILE_SHARE_ALL: u32 = 0x0000_0007;
+const OPEN_EXISTING: u32 = 3;
+const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+/// FILETIME（1601 年起的 100ns）→ Unix 秒
+fn filetime_to_unix(ft: &FILETIME) -> i64 {
+    let v = ((ft.dwHighDateTime as u64) << 32) | ft.dwLowDateTime as u64;
+    (v / 10_000_000) as i64 - 11644473600
+}
+
+/// 读取文件创建时间（Unix 秒）
+pub fn creation_time(path: &std::path::Path) -> Option<i64> {
+    let mut w: Vec<u16> = path.as_os_str().encode_wide().collect();
+    w.push(0);
+    unsafe {
+        let h = CreateFileW(
+            w.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_ALL,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS,
+            std::ptr::null_mut(),
+        );
+        if h.is_null() || h as isize == -1 {
+            return None;
+        }
+        let mut creation = FILETIME::default();
+        let ok = GetFileTime(h, &mut creation, std::ptr::null_mut(), std::ptr::null_mut());
+        CloseHandle(h);
+        if ok == 0 {
+            return None;
+        }
+        let secs = filetime_to_unix(&creation);
+        // 早于 1980 的当作无效
+        if secs < 315532800 {
+            None
+        } else {
+            Some(secs)
+        }
+    }
+}

@@ -5,12 +5,10 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
-use crate::model::LogLine;
 use crate::store;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;

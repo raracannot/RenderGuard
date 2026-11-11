@@ -706,3 +706,64 @@ pub fn pack_preview(src_dir: String) -> serde_json::Value {
         .unwrap_or_else(|| std::path::PathBuf::from(format!("{}.mp4", stem)));
     serde_json::json!({ "count": count, "stem": stem, "outFile": out.to_string_lossy() })
 }
+
+// ---------------------------------------------------------------- 批量重命名
+
+#[tauri::command]
+pub fn rename_preview(cfg: crate::rename::RenameCfg) -> crate::rename::Preview {
+    crate::rename::preview(&cfg)
+}
+
+#[tauri::command]
+pub fn rename_apply(cfg: crate::rename::RenameCfg) -> Result<serde_json::Value, String> {
+    let (done, skipped, total) = crate::rename::apply(&cfg)?;
+    Ok(serde_json::json!({ "done": done, "skipped": skipped, "total": total }))
+}
+
+#[tauri::command]
+pub fn rename_undo() -> Result<usize, String> {
+    crate::rename::undo_last()
+}
+
+#[tauri::command]
+pub fn rename_undo_state() -> Option<i64> {
+    crate::rename::undo_available()
+}
+
+// ---------------------------------------------------------------- 图像处理
+
+#[tauri::command]
+pub fn imgproc_start(app: AppHandle, cfg: crate::imgtool::ProcCfg) -> Result<(), String> {
+    std::thread::spawn(move || {
+        let _ = crate::imgtool::run(Some(app), &cfg);
+    });
+    Ok(())
+}
+
+/// 统计将要处理多少张、总体积
+#[tauri::command]
+pub fn imgproc_stat(cfg: crate::imgtool::ProcCfg) -> serde_json::Value {
+    let files = crate::imgtool::collect(&cfg);
+    let bytes: u64 = files
+        .iter()
+        .filter_map(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len())
+        .sum();
+    serde_json::json!({ "count": files.len(), "bytes": bytes })
+}
+
+// ---------------------------------------------------------------- 水印
+
+#[tauri::command]
+pub fn watermark_start(app: AppHandle, cfg: crate::watermark::WaterCfg) -> Result<(), String> {
+    std::thread::spawn(move || {
+        let _ = crate::watermark::run(Some(app), &cfg);
+    });
+    Ok(())
+}
+
+/// 对第一张图做一次水印，返回 data URL 供界面预览
+#[tauri::command]
+pub fn watermark_preview(cfg: crate::watermark::WaterCfg) -> Result<String, String> {
+    crate::watermark::preview(&cfg)
+}

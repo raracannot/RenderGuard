@@ -724,3 +724,132 @@ button { text-transform: var(--btn-transform, none); letter-spacing: var(--btn-s
 
 /* 不带开关的固定行（渲染类型） */
 .ov.always { grid-template-columns: 88px 1fr; }
+
+/* ---------------- 批量重命名 ---------------- */
+.rn-dialog { max-width: 720px; }
+.rn-list {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg2);
+  padding: 6px;
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+}
+.rn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+.rn-row + .rn-row { border-top: 1px solid rgba(255,255,255,.04); }
+.rn-row.bad { background: rgba(255,120,110,.08); }
+.rn-from { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-arrow { color: var(--dim2); text-align: center; }
+.rn-to { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-issue {
+  font-size: 11px;
+  color: #ff8b84;
+  border: 1px solid rgba(255,120,110,.35);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.chk.inline { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---------------- 图像处理 / 水印 ---------------- */
+.ip-dialog, .wm-dialog { max-width: 780px; }
+.wm-preview {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg2);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 8px;
+}
+.wm-preview img { max-width: 100%; max-height: 300px; border-radius: 6px; display: block; }
+
+/* ---------------- 图像工具箱标签页 ---------------- */
+.img-dialog { max-width: 800px; }
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 18px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.tabs .tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.tabs .tab:hover { background: rgba(255,255,255,.05); color: var(--fg); }
+.tabs .tab.on {
+  background: rgba(var(--accent-rgb), .16);
+  border-color: rgba(var(--accent-rgb), .35);
+  color: var(--fg);
+}
+
+
+/* ---------------- 表单行排版修正 ----------------
+   之前 .unit 没有 nowrap，行内又不能换行，标签会被压成竖排。 */
+.row-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.row-inline > .unit,
+.row-inline > .x,
+.row-inline > .tag {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.row-inline > .unit.sep { margin-left: 10px; }
+.row-inline > .tag {
+  color: var(--dim2);
+  font-size: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 16px;
+}
+.row-inline > input[type=text] {
+  flex: 1 1 190px;
+  min-width: 150px;
+}
+.row-inline > input[type=color],
+.row-inline > .colorpick {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.row-inline > select { max-width: 200px; }
+
+
+/* 行内标签：绝对不收缩、绝不换行 */
+.row-inline > .unit,
+.row-inline > label,
+.row-inline > .x,
+.row-inline > .tag {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  min-width: max-content;
+}

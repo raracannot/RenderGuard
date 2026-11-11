@@ -2,12 +2,17 @@
 
 mod commands;
 mod filecheck;
+mod imgtool;
+mod media;
 mod model;
 mod openapp;
 mod pack;
 mod probe;
+mod rename;
 mod runner;
 mod store;
+mod videoinfo;
+mod watermark;
 mod winproc;
 
 use std::sync::{Arc, Mutex};
@@ -23,6 +28,141 @@ fn main() {
     store::cleanup_stale_temp();
 
     let args: Vec<String> = std::env::args().collect();
+
+    if let Some(i) = args.iter().position(|a| a == "--watermark") {
+        match args.get(i + 1) {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).unwrap_or_default();
+                match serde_json::from_str::<watermark::WaterCfg>(&text) {
+                    Ok(cfg) => match watermark::run(None, &cfg) {
+                        Ok((ok, bad)) => {
+                            println!("水印完成：成功 {} 个，失败 {} 个", ok, bad);
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            eprintln!("失败：{}", e);
+                            std::process::exit(1);
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("配置解析失败：{}", e);
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => {
+                eprintln!("用法: renderguard.exe --watermark <cfg.json>");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--imgproc") {
+        match args.get(i + 1) {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).unwrap_or_default();
+                match serde_json::from_str::<imgtool::ProcCfg>(&text) {
+                    Ok(cfg) => match imgtool::run(None, &cfg) {
+                        Ok(r) => {
+                            println!(
+                                "完成 {} 个，跳过 {}，失败 {} | 体积 {:.1} MB → {:.1} MB | {:.1} 秒",
+                                r.done, r.skipped, r.failed,
+                                r.in_bytes as f64 / 1048576.0,
+                                r.out_bytes as f64 / 1048576.0,
+                                r.elapsed_ms as f64 / 1000.0
+                            );
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            eprintln!("失败：{}", e);
+                            std::process::exit(1);
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("配置解析失败：{}", e);
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => {
+                eprintln!("用法: renderguard.exe --imgproc <cfg.json>");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--rename") {
+        match args.get(i + 1) {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).unwrap_or_default();
+                match serde_json::from_str::<rename::RenameCfg>(&text) {
+                    Ok(cfg) => {
+                        let pv = rename::preview(&cfg);
+                        if !pv.error.is_empty() {
+                            eprintln!("错误：{}", pv.error);
+                            std::process::exit(1);
+                        }
+                        println!("共 {} 条，冲突/异常 {} 条", pv.total, pv.bad);
+                        for r in pv.rows.iter().take(12) {
+                            println!(
+                                "  {:<28} -> {}{} {}",
+                                r.name, r.new_name, r.new_ext, r.issue
+                            );
+                        }
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("配置解析失败：{}", e);
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => {
+                eprintln!("用法: renderguard.exe --rename <cfg.json>");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--rename-apply") {
+        match args.get(i + 1) {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).unwrap_or_default();
+                let cfg: rename::RenameCfg = serde_json::from_str(&text).unwrap_or_default();
+                match rename::apply(&cfg) {
+                    Ok((done, skipped, total)) => {
+                        println!("重命名完成：成功 {} 个，跳过 {} 个，共 {} 个", done, skipped, total);
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("失败：{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            None => {
+                eprintln!("用法: renderguard.exe --rename-apply <cfg.json>");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--rename-undo") {
+        let _ = i;
+        match rename::undo_last() {
+            Ok(n) => println!("已撤销，恢复 {} 个文件", n),
+            Err(e) => eprintln!("撤销失败：{}", e),
+        }
+        std::process::exit(0);
+    }
+
+    if let Some(i) = args.iter().position(|a| a == "--img") {
+        match args.get(i + 1) {
+            Some(p) => image_bench(p),
+            None => eprintln!("用法: renderguard.exe --img <目录或文件>"),
+        }
+        std::process::exit(0);
+    }
 
     if let Some(i) = args.iter().position(|a| a == "--pack") {
         let Some(path) = args.get(i + 1) else {
@@ -260,6 +400,14 @@ fn gui() {
             commands::pack_start,
             commands::pack_cancel,
             commands::pack_preview,
+            commands::rename_preview,
+            commands::rename_apply,
+            commands::rename_undo,
+            commands::rename_undo_state,
+            commands::imgproc_start,
+            commands::imgproc_stat,
+            commands::watermark_start,
+            commands::watermark_preview,
         ])
         .run(tauri::generate_context!())
         .expect("RenderGuard 启动失败");
@@ -437,5 +585,45 @@ fn selftest(cfg_path: &str) -> i32 {
         3
     } else {
         4
+    }
+}
+
+/// 命令行：统计一批图片的元信息读取耗时（用于评估 image crate 的成本）
+fn image_bench(dir: &str) {
+    let path = std::path::Path::new(dir);
+    let mut files: Vec<std::path::PathBuf> = if path.is_dir() {
+        std::fs::read_dir(path)
+            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect())
+            .unwrap_or_default()
+    } else {
+        vec![path.to_path_buf()]
+    };
+    files.sort();
+    let total = files.len();
+    let t = std::time::Instant::now();
+    let mut ok = 0usize;
+    let mut sample = String::new();
+    for p in &files {
+        if let Some(info) = media::read_image_info(p) {
+            ok += 1;
+            if sample.is_empty() {
+                sample = format!(
+                    "{}: {}x{} {}bit {}ch {}",
+                    p.file_name().unwrap_or_default().to_string_lossy(),
+                    info.width, info.height, info.depth, info.channels, info.format
+                );
+            }
+        }
+    }
+    let dt = t.elapsed();
+    println!(
+        "图片 {} 个，识别 {} 个，总耗时 {:.1} ms，平均 {:.3} ms/个",
+        total,
+        ok,
+        dt.as_secs_f64() * 1000.0,
+        dt.as_secs_f64() * 1000.0 / total.max(1) as f64
+    );
+    if !sample.is_empty() {
+        println!("样例 {}", sample);
     }
 }
