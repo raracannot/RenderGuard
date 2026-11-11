@@ -1,8 +1,7 @@
 # 渲染守护 RenderGuard
 
-Blender 批量渲染队列 + **崩溃自动续接**。单文件便携 exe，不需要安装 Python 或任何运行时（Windows 10/11 自带 WebView2）。
-
-> **不想编译？** 直接下 [便携版 v1.0.0](https://github.com/raracannot/RenderGuard/releases/latest)：解压，双击 `RenderGuard.exe`。
+Blender 批量渲染队列 + **崩溃自动续接**，外加三个流水线小工具：**重命名 / 图像工具箱 / 视频打包**。
+单文件便携 exe，不需要安装 Python 或任何运行时（Windows 10/11 自带 WebView2）。
 
 ---
 
@@ -28,7 +27,9 @@ RenderGuard.exe  ──启动/监控/重启──▶  blender -b 工程.blend -a
 
 ## 功能
 
-- **批量队列**：多个任务排队，一个接一个跑，完成自动流转到下一个
+- **批量队列**：多个任务排队，一个接一个跑；**顺序即列表顺序**，可拖拽调整
+- **勾选即参与**：每行一个勾选框，取消勾选=暂时屏蔽（灰显但不删除）；
+  成功渲染后自动取消勾选，失败保持勾选 —— 再点「开始全队列」就只重试失败的
 - **批量建任务**：把一批 .blend 或整个文件夹拖进窗口，自动用默认参数解析成任务（也可点「文件夹」选目录）；解析过程有进度、可随时中断
 - **从已打开的 Blender 直接取**：新建任务时会列出当前开着的 Blender 窗口，点一下文件名就自动填入完整路径并解析（连用的哪个 Blender 版本一起带上）
 - **一键在 Blender 中编辑**：任务详情里点「Blender 中编辑」，用该任务指定的 Blender 打开它的工程，方便临时改东西
@@ -53,7 +54,7 @@ RenderGuard.exe  ──启动/监控/重启──▶  blender -b 工程.blend -a
 3. 点「添加任务」→ 选 .blend → 点「读取参数」
 4. 勾选要覆盖的参数（不勾就用 .blend 原值）
 5. 设置崩溃策略 → 「加入队列」
-6. 点「开始」
+6. 点「开始全队列」
 
 每个任务也可以单独指定另一个 Blender 版本（多版本共存时很有用）；在任务弹窗里选好后点「设为默认」即可把它变成以后新建任务的默认值。
 
@@ -62,6 +63,71 @@ RenderGuard.exe  ──启动/监控/重启──▶  blender -b 工程.blend -a
 ### 便携模式
 
 exe 同级放一个 `portable.txt`，所有数据（队列、日志、WebView2 缓存）都写在 `exe目录\data\`，不碰系统目录。删掉这个文件则改用 `%LOCALAPPDATA%\RenderGuard`。
+
+---
+
+## 附带工具
+
+顶栏三个入口，都独立于渲染队列，随时可用。
+
+### 重命名
+
+语法与 Blender 插件 [AA-RENAME] 保持一致，方便把已有习惯直接搬过来。
+
+```
+<NUMBER>_<SELF>                 → 001_镜头A
+<SELF/UPPER/CUT:5>              → 原名转大写后保留前 5 个字
+<CN><NUMBER_RM>                 → 中文部分 + 罗马序号
+<DURATION>s_<FPS>fps            → 从视频读时长与帧率
+```
+
+- **替换符**：`<SELF>` `<EXT>` `<NUMBER>` `<NUMBER_CN/EN/RM>` `<FOLDER>` `<CN>` `<EN>` `<NU>`
+  `<PX>` `<BIT>` `<MD5>` `<SHA1>` `<SHA256>` `<DATE>` 及创建/修改时间系列 `<DURATION>` `<FPS>`
+- **二次操作符**（51 个）：`/CUT` `/DEL` `/PAD` `/REPLACE` `/SPLIT` `/BEFORE` `/AFTER`
+  `/BETWEEN` `/RE:正则` `/MATH` `/NU2CN` 等
+- **两阶段改名**：先全部改成临时名，再改成目标名，避免 `A→B` 与 `B→C` 互相覆盖
+- **冲突检测**：批内重名、目标已存在、非法字符、超长路径
+- **撤销**：每次执行写记录，保留最近 20 次，一键还原
+
+### 图像工具箱
+
+四个标签页，互不干扰，共用同一份「来源」设置。
+
+| 标签页 | 能力 |
+|---|---|
+| 格式转换 | PNG / JPG / TIFF / BMP 互转，质量可调，透明图可垫白/黑底或跳过 |
+| 图像压缩 | 按目标体积（如每张 300 KB，逐张二分搜索质量）或按固定质量 |
+| 图像缩放 | 长边 / 百分比 / 固定尺寸，Lanczos3 等四种重采样，只缩不放、宽高强制偶数 |
+| 水印添加 | 文字（系统字体，中文正常）或图像；九宫格定位或平铺；间距、尺寸、透明度可调；带实时预览 |
+
+- 默认输出到源目录下的 `_converted` / `_compressed` / `_resized` / `_watermarked`，**不覆盖原图**
+- 多线程：120 张 1080p 转 JPG 约 0.7 秒，缩到 1280 约 1.7 秒
+- 文字水印用 GDI 绘制，不内嵌字体，体积零增长
+
+### 视频打包
+
+把图片序列打包成一个视频，用 Blender 自带的 FFmpeg 编码器，**不需要另装 ffmpeg**。
+
+- 排序规则与重命名工具一致（自然序，`f2` 在 `f10` 前）
+- 帧率默认 30；容器 MP4 / MKV / MOV / WebM；编码 H.264 / H.265 / AV1 / ProRes / PNG / QTRLE
+- 音轨默认不加，可指定音频文件，或指定带音轨的视频（只取声音）
+- **保留透明通道**：MOV 容器 + PNG / QTRLE / ProRes 4444（实测 `rgba` / `argb` / `yuva444p`）
+
+---
+
+## 命令行
+
+除了界面，这些都能直接用：
+
+```bat
+RenderGuard.exe --enqueue 任务.json        投递任务到运行中的队列
+RenderGuard.exe --pack 配置.json           图片序列 → 视频
+RenderGuard.exe --rename 配置.json         预览重命名（不执行）
+RenderGuard.exe --rename-apply 配置.json   执行重命名
+RenderGuard.exe --rename-undo              撤销上一次重命名
+RenderGuard.exe --imgproc 配置.json        批量转换 / 缩放 / 压缩
+RenderGuard.exe --watermark 配置.json      批量加水印
+```
 
 ---
 
