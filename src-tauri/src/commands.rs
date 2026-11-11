@@ -19,21 +19,10 @@ fn new_id() -> String {
     format!("{}-{}", runner::now_secs(), n)
 }
 
-/// 队列泵：空闲时取第一个排队任务开跑
+/// 队列泵：用户点「开始」时触发调度
 pub fn pump(app: &AppHandle, shared: &Shared) {
-    let next = {
-        let Ok(s) = shared.lock() else { return };
-        if !s.running.is_empty() {
-            return;
-        }
-        s.jobs
-            .iter()
-            .find(|j| j.status == JobStatus::Queued)
-            .map(|j| j.id.clone())
-    };
-    if let Some(id) = next {
-        runner::start(Some(app.clone()), shared.clone(), id);
-    }
+    // 用户显式点了「开始」：不受 queue_auto 限制，但依赖与并发上限照旧生效
+    runner::schedule_next_with(&Some(app.clone()), shared, true);
 }
 
 // ------------------------------------------------------------------ 探测

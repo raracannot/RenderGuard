@@ -844,15 +844,20 @@ fn dep_check(jobs: &[Job], job: &Job) -> DepCheck {
     }
 }
 
-/// 按优先级/依赖挑任务，填满并发槽位
+/// 按优先级/依赖挑任务，填满并发槽位（受 queue_auto 约束）
 pub fn schedule_next(app: &Option<AppHandle>, shared: &Shared) {
+    schedule_next_with(app, shared, false);
+}
+
+/// force = 用户手动点了「开始」：无视 queue_auto，但仍遵守依赖与并发上限
+pub fn schedule_next_with(app: &Option<AppHandle>, shared: &Shared, force: bool) {
     let mut to_start: Vec<String> = Vec::new();
     let mut finished_summary: Option<String> = None;
     {
         let Ok(mut s) = shared.lock() else {
             return;
         };
-        if !s.settings.queue_auto {
+        if !force && !s.settings.queue_auto {
             return;
         }
         let limit = s.settings.max_concurrent.max(1) as usize;
