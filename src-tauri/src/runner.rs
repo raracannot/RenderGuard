@@ -881,15 +881,24 @@ fn run_segment(
 
     // 给子进程一个干净的工作目录：不少插件会往 CWD 写东西（例如 hot_node 的 autosave），
     // 继承 exe 目录既污染安装位置，也容易和退出时的临时文件清理打架。
-    // 注意：CWD 与 TMP 必须是两个不同的目录 —— 设成同一个时，Blender 退出清理会发现
-    // "临时目录就是自己的当前目录"，删不掉又反复重试（实测单次刷出 18 万行日志）。
     let work_dir = store::data_dir().join("cwd");
     let _ = std::fs::create_dir_all(&work_dir);
+
+    // 临时目录也必须由我们指定，并且**不能和 CWD 是同一个**：
+    // - 有些环境下子进程在 %TEMP% 下建目录会被拒（实测 WinError 5），
+    //   Blender 建不出会话子目录就会退回临时目录本身，退出时去清扫整个 %TEMP%，
+    //   删不掉的文件反复重试，白等几十秒（4.x 全版本如此）；
+    // - 若把 CWD 和 TMP 设成同一个目录，它又会删不掉"自己的当前目录"而陷入死循环。
+    let temp_dir = store::data_dir().join("tmp");
+    let _ = std::fs::create_dir_all(&temp_dir);
 
     cmd.env("RG_JOB", &job_json_path)
         .env("RG_HEARTBEAT", &hb_path)
         .env("RG_OVERWRITE", if overwrite { "1" } else { "0" })
         .env("RG_CLEAN", if use_clean { "1" } else { "0" })
+        .env("TEMP", &temp_dir)
+        .env("TMP", &temp_dir)
+        .env("TMPDIR", &temp_dir)
         .current_dir(&work_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -191,6 +191,25 @@ def check_tempdir():
         tmp = bpy.app.tempdir or ""
     except Exception:
         return
+    if os.environ.get("RG_TRACE") == "1":
+        try:
+            n = len(os.listdir(tmp)) if tmp and os.path.isdir(tmp) else -1
+        except Exception as e:
+            n = "读不了:%s" % e
+        print(
+            "RG_TEMP_DIR=%r exists=%s 条目=%s TEMP=%r TMP=%r CWD=%r 变量数=%d"
+            % (tmp, os.path.isdir(tmp), n,
+               os.environ.get("TEMP"), os.environ.get("TMP"), os.getcwd(),
+               len(os.environ))
+        )
+        # 验证：本进程能否真的在 TEMP 下建目录
+        try:
+            probe = os.path.join(os.environ.get("TEMP") or ".", "rg_probe_%d" % os.getpid())
+            os.mkdir(probe)
+            os.rmdir(probe)
+            print("RG_TEMP_MKDIR=ok")
+        except Exception as e:
+            print("RG_TEMP_MKDIR=失败 %s: %s" % (type(e).__name__, e))
     p = tmp.replace("\\", "/").rstrip("/")
     is_drive_root = len(p) == 2 and p[1] == ":"
     if is_drive_root:
